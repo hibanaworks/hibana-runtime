@@ -20,16 +20,16 @@
 //! }
 //! #[hibana_runtime::main(Events)]
 //! async fn example() -> Result<(), Infallible> {
-//!     let left = Cell::new(0);
-//!     let right = Cell::new(0);
+//!     let responses = Cell::new(0);
+//!     let audits = Cell::new(0);
 //!     async {
 //!         #[localside]
-//!         write(&left, 7);
+//!         write(&responses, 7);
 //!         #[localside]
-//!         write(&right, 8);
+//!         write(&audits, 8);
 //!         Ok(())
 //!     }.await?;
-//!     assert_eq!((left.get(), right.get()), (7, 8));
+//!     assert_eq!((responses.get(), audits.get()), (7, 8));
 //!     Ok(())
 //! }
 //! example().unwrap();
@@ -38,8 +38,9 @@
 //! The same exclusive Endpoint cannot be borrowed by two declarations:
 //!
 //! ```compile_fail,E0499
+//! const CLIENT: u8 = 0;
 //! #[hibana_runtime::localside]
-//! async fn conflicting(mut endpoint: hibana::Endpoint<'_, 0>) -> Result<(), hibana::EndpointError> {
+//! async fn conflicting(mut endpoint: hibana::Endpoint<CLIENT>) -> Result<(), hibana::EndpointError> {
 //!     async { endpoint.send::<hibana::g::Msg<1, u32>>(&7).await };
 //!     async { endpoint.send::<hibana::g::Msg<2, u32>>(&8).await };
 //!     Ok(())

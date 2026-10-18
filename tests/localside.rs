@@ -543,3 +543,71 @@ fn unit_control_flow_needs_no_boilerplate_success_values() {
     run(program(&completed)).unwrap();
     assert_eq!(completed.get(), 5);
 }
+
+#[test]
+fn unused_and_wildcard_arguments_remain_owned_by_an_unpolled_future() {
+    #[localside]
+    async fn unused(_resource: Never) -> Outcome {
+        Ok(())
+    }
+    #[localside]
+    async fn wildcard(_: Never) -> Outcome {
+        Ok(())
+    }
+    let drops = Cell::new(0);
+    let future = unused(Never(&drops));
+    assert_eq!(drops.get(), 0);
+    drop(future);
+    assert_eq!(drops.get(), 1);
+    let future = wildcard(Never(&drops));
+    assert_eq!(drops.get(), 1);
+    drop(future);
+    assert_eq!(drops.get(), 2);
+}
+
+#[test]
+fn argument_destructuring_and_receiver_ownership_match_async_functions() {
+    async fn native((resource, _): (Never<'_>, Never<'_>), drops: &Cell<u32>) -> Outcome {
+        assert_eq!(drops.get(), 0);
+        yield_once().await;
+        drop(resource);
+        Ok(())
+    }
+    #[localside]
+    async fn generated((resource, _): (Never, Never), drops: &Cell<u32>) -> Outcome {
+        assert_eq!(drops.get(), 0);
+        yield_once().await;
+        drop(resource);
+        Ok(())
+    }
+    let native_drops = Cell::new(0);
+    let generated_drops = Cell::new(0);
+    let native = native((Never(&native_drops), Never(&native_drops)), &native_drops);
+    let generated = generated(
+        (Never(&generated_drops), Never(&generated_drops)),
+        &generated_drops,
+    );
+    assert_eq!(native_drops.get(), generated_drops.get());
+    run(native).unwrap();
+    run(generated).unwrap();
+    assert_eq!(native_drops.get(), 2);
+    assert_eq!(generated_drops.get(), 2);
+
+    struct Task<'a> {
+        _resource: Never<'a>,
+    }
+    impl Task<'_> {
+        #[localside]
+        async fn execute(self) -> Outcome {
+            Ok(())
+        }
+    }
+    let drops = Cell::new(0);
+    let future = Task {
+        _resource: Never(&drops),
+    }
+    .execute();
+    assert_eq!(drops.get(), 0);
+    drop(future);
+    assert_eq!(drops.get(), 1);
+}

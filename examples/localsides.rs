@@ -24,7 +24,7 @@ type Carrier = Loopback<4, 4>;
 #[hibana_runtime::main(WakeLatch::new())]
 async fn main() -> Result<(), EndpointError> {
     let global = protocol::global();
-    for alternate in [false, true] {
+    for update in [false, true] {
         // Physical transport, storage and initial issuance are bootstrap work.
         let mut slab = [0_u8; 16 * 1024];
         let mut storage = SessionKitStorage::<Carrier>::uninit();
@@ -34,39 +34,39 @@ async fn main() -> Result<(), EndpointError> {
             .expect("rendezvous");
         let session = SessionId::new(1);
         // These roles are inferred from the localside signatures below.
-        let left = rendezvous
+        let client = rendezvous
             .enter(session, &project(&global))
             .expect("attach");
-        let left_peer = rendezvous
+        let server = rendezvous
             .enter(session, &project(&global))
             .expect("attach");
-        let right = rendezvous
+        let auditor = rendezvous
             .enter(session, &project(&global))
             .expect("attach");
-        let right_peer = rendezvous
+        let store = rendezvous
             .enter(session, &project(&global))
             .expect("attach");
-        let left_value = Cell::new(0);
-        let right_value = Cell::new(0);
+        let response = Cell::new(0);
+        let count = Cell::new(0);
 
         async {
             #[localside]
-            sides::left_peer(left_peer);
+            sides::server(server);
             #[localside]
-            sides::right_peer(right_peer);
+            sides::store(store);
             #[localside]
-            sides::left(left, alternate, &left_value);
+            sides::client(client, update, &response);
             #[localside]
-            sides::right(right, &right_value);
+            sides::auditor(auditor, &count);
             Ok(())
         }
         .await?;
-        assert_eq!(left_value.get(), if alternate { 71 } else { 8 });
-        assert_eq!(right_value.get(), 84);
+        assert_eq!(response.get(), if update { 71 } else { 8 });
+        assert_eq!(count.get(), 84);
         println!(
-            "alternate={alternate}, left={}, right={}",
-            left_value.get(),
-            right_value.get()
+            "update={update}, client={}, auditor={}",
+            response.get(),
+            count.get()
         );
     }
     Ok(())

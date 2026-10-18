@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as Tokens};
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, Block, Expr, ItemFn, ReturnType, Stmt, Type,
+    Attribute, Block, Expr, FnArg, ItemFn, ReturnType, Stmt, Type,
     parse::{ParseStream, Parser},
     parse_macro_input, parse_quote,
     visit_mut::{self, VisitMut},
@@ -50,6 +50,51 @@ fn expand(mut function: ItemFn, driver: Option<Expr>) -> TokenStream {
         let body = function.block;
         function.block = Box::new(parse_quote!({
             ::hibana_runtime::__private::block_on(async move #body, #driver)
+        }));
+    } else {
+        // Ordinary Rust 2024 function signatures support lifetime elision in
+        // paths such as Endpoint<CLIENT>. Return-position impl Future captures
+        // those input lifetimes without exposing a placeholder in user code.
+        // Bind patterns inside the future and retain even unused arguments,
+        // preserving async fn's lazy destructuring and argument ownership.
+        let bindings: Vec<_> = function
+            .sig
+            .inputs
+            .iter_mut()
+            .enumerate()
+            .map(|(index, argument)| match argument {
+                FnArg::Typed(argument) => {
+                    let pattern = argument.pat.clone();
+                    let name = match argument.pat.as_mut() {
+                        syn::Pat::Ident(pattern)
+                            if pattern.by_ref.is_none() && pattern.subpat.is_none() =>
+                        {
+                            pattern.mutability = None;
+                            pattern.ident.clone()
+                        }
+                        _ => {
+                            let name = format_ident!(
+                                "__hibana_argument{index}",
+                                span = Span::mixed_site()
+                            );
+                            *argument.pat = parse_quote!(#name);
+                            name
+                        }
+                    };
+                    let attrs = &argument.attrs;
+                    quote!(
+                        #(#attrs)* let _ = &#name;
+                        #(#attrs)* let #pattern = #name;
+                    )
+                }
+                FnArg::Receiver(_) => quote!(let _ = &self;),
+            })
+            .collect();
+        function.sig.asyncness = None;
+        function.sig.output = parse_quote!(-> impl ::core::future::Future<Output = #output>);
+        let body = function.block;
+        function.block = Box::new(parse_quote!({
+            async move { #(#bindings)* #body }
         }));
     }
     quote!(#function).into()

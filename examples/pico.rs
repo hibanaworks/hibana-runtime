@@ -38,11 +38,11 @@ mod embedded {
     }
 
     #[hibana_runtime::localside]
-    async fn workload(left: u32, right: u32) -> Result<(), Infallible> {
+    async fn workload(request_steps: u32, audit_steps: u32) -> Result<(), Infallible> {
         #[localside]
-        Work(core::hint::black_box(left));
+        Work(core::hint::black_box(request_steps));
         #[localside]
-        Work(core::hint::black_box(right));
+        Work(core::hint::black_box(audit_steps));
         Ok(())
     }
 

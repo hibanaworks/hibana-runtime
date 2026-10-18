@@ -8,23 +8,23 @@ Rust 2024, unconditional `no_std`, no runtime allocation, caller-owned storage.
 ```rust
 #[hibana_runtime::main(events)]
 async fn image(
-    (a, b): (Endpoint<'_, 1>, Endpoint<'_, 3>),
+    (server, store): (Endpoint<SERVER>, Endpoint<STORE>),
     events: Events,
 ) -> Result<(), EndpointError> {
     #[localside]
-    sides::left_peer(a);
+    sides::server(server);
     #[localside]
-    sides::right_peer(b);
+    sides::store(store);
     Ok(())
 }
 ```
 
-This is the right-hand image in the runnable [two-image example](examples/images.rs).
+This is the service image in the runnable [two-image example](examples/images.rs).
 The same [global](examples/localsides/protocol.rs), containing `par` and `route`,
 and the same [localside functions](examples/localsides/sides.rs), containing
 `send`/`recv`/`offer` and effects, execute across either two OS threads or two
-actual OS processes. The other image holds roles 0 and 2. No task or Endpoint
-pointer crosses the socket.
+actual OS processes. The application image holds CLIENT and AUDITOR. No task or
+Endpoint pointer crosses the socket.
 
 ## Async bodies own execution
 
@@ -36,7 +36,12 @@ declares an inline localside when writing its operations in place.
 A declaration runs concurrently with the rest of its **async body**. The future
 finishes its children before successfully returning. Constructors and arguments
 execute at their source position; declarations are not hoisted over effects or
-awaits. Children may borrow caller-owned data and need not be `Send`, `'static`,
+awaits. Localside signatures use role names, such as `Endpoint<CLIENT>`, without
+lifetime placeholders. The attribute lowers the function to an ordinary Rust 2024
+function returning a future; Rust captures the elided input lifetimes. Argument
+ownership and lazy parameter destructuring retain async-function behavior.
+
+Children may borrow caller-owned data and need not be `Send`, `'static`,
 or `Unpin`.
 
 Ordinary `{}` blocks do not introduce waiting, joining, or async destruction.

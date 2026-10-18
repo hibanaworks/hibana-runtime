@@ -41,7 +41,7 @@ async fn yield_once() {
 }
 
 #[localside]
-async fn worker(mut worker: Endpoint<'_, 1>, effects: &Cell<u32>) -> Outcome {
+async fn worker(mut worker: Endpoint<1>, effects: &Cell<u32>) -> Outcome {
     let mut db = worker.recv::<Loan>().await?;
     let mut auth = worker.recv::<OtherLoan>().await?;
     let db_started = Cell::new(false);
@@ -76,11 +76,7 @@ async fn worker(mut worker: Endpoint<'_, 1>, effects: &Cell<u32>) -> Outcome {
 }
 
 #[localside]
-async fn owner(
-    mut owner: Endpoint<'_, 0>,
-    db: Endpoint<'_, 10>,
-    auth: Endpoint<'_, 11>,
-) -> Outcome {
+async fn owner(mut owner: Endpoint<0>, db: Endpoint<10>, auth: Endpoint<11>) -> Outcome {
     owner.send::<Loan>(db).await?;
     owner.send::<OtherLoan>(auth).await?;
     let mut db = owner.recv::<Loan>().await?;
@@ -101,7 +97,7 @@ async fn owner(
 }
 
 #[localside]
-async fn service<const ROLE: u8>(mut endpoint: Endpoint<'_, ROLE>) -> Outcome {
+async fn service<const ROLE: u8>(mut endpoint: Endpoint<ROLE>) -> Outcome {
     for _ in 0..2 {
         let request = endpoint.recv::<Read>().await?;
         yield_once().await;
