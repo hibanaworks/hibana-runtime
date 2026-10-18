@@ -116,6 +116,12 @@ python3 tools/validate.py
 
 The example executes both route choices under a parallel global, using direct
 `offer`/`send`/`recv`. The carrier and event latch allocate nothing.
+The global is independently defined in
+[protocol.rs](examples/localsides/protocol.rs). Startup explicitly calls
+`project::<ROLE>(&global)` for every role, then issues each Endpoint with
+`rendezvous.enter`. [Localside bodies](examples/localsides/sides.rs) receive
+those Endpoints and contain no projection or global definition. Neither
+attribute performs projection or initial Endpoint issuance.
 
 Validation runs sequentially under the shared [3 GB descendant RSS
 guard](tools/resource_guard.py). Logs, memory peaks, and source hashes are kept

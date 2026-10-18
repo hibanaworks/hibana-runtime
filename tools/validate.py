@@ -55,6 +55,7 @@ def main():
     run("lean", "lean", f"+{LEAN_TOOLCHAIN}", "proofs/Scheduler.lean")
     run("z3", "z3", "proofs/scheduler.smt2", expected=["sat", "unsat"] * 8)
     run("miri", "cargo", f"+{MIRI_TOOLCHAIN}", "miri", "test", "--test", "runtime", "--test", "localside", "--test", "no_alloc", "--locked", "-j", "1")
+    run("miri-localsides", "cargo", f"+{MIRI_TOOLCHAIN}", "miri", "run", "--example", "localsides", "--locked", "-j", "1")
     core = os.environ.get("HIBANA_DELEGATION_CORE")
     if core:
         run("delegation-host", sys.executable, "tools/check_delegation.py", core)
