@@ -13,7 +13,7 @@ async fn task<const SLOT: usize>(completed: &Cell<usize>) -> Result<(), Infallib
 #[hibana_runtime::main(WakeLatch::new())]
 async fn main() -> Result<(), Infallible> {
     let completed = Cell::new(0);
-    {
+    async {
         #[localside]
         task::<0>(&completed);
         #[localside]
@@ -526,7 +526,9 @@ async fn main() -> Result<(), Infallible> {
         task::<254>(&completed);
         #[localside]
         task::<255>(&completed);
+        Ok(())
     }
+    .await?;
     assert_eq!(completed.get(), 256);
     Ok(())
 }

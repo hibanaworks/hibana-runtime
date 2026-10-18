@@ -145,12 +145,14 @@ fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
     }
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program(completed: &Cell<u32>, cancelled: &Cell<usize>) -> Result<(), ()> {
-        {
+        async {
             #[localside]
             effect(completed);
             #[localside]
             effect(completed);
+            Ok(())
         }
+        .await?;
         #[localside]
         PendingDrop(cancelled);
         Err(())

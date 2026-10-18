@@ -7,6 +7,7 @@ ENTRY(_start)
 SECTIONS {
   .text : {
     KEEP(*(.text.runtime_storage_bytes))
+    KEEP(*(.text.core1_entry))
     *(.text .text.*)
   } > FLASH
   .rodata : {

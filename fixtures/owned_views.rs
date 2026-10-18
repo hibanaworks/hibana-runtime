@@ -13,6 +13,9 @@ use core::{
 };
 use hibana_runtime::{Driver, localside};
 
+#[cfg(all(unix, not(miri)))]
+mod remote;
+
 type Outcome<T = ()> = Result<T, EndpointError>;
 
 struct TestEvents;
@@ -43,7 +46,7 @@ async fn worker(mut worker: Endpoint<'_, 1>, effects: &Cell<u32>) -> Outcome {
     let mut auth = worker.recv::<OtherLoan>().await?;
     let db_started = Cell::new(false);
     let auth_started = Cell::new(false);
-    {
+    async {
         async {
             // Deliberately poll the second source arm first.
             auth.send::<Read>(&11).await?;
@@ -63,7 +66,9 @@ async fn worker(mut worker: Endpoint<'_, 1>, effects: &Cell<u32>) -> Outcome {
             assert_eq!(db.recv::<Value>().await?, 8);
             effects.set(effects.get() + 1);
         };
+        Ok(())
     }
+    .await?;
     // Both borrows have ended. Return the actual owned views, not recreated
     // handles, and let OWNER continue from their current protocol position.
     worker.send::<Loan>(db).await?;
@@ -80,7 +85,7 @@ async fn owner(
     owner.send::<OtherLoan>(auth).await?;
     let mut db = owner.recv::<Loan>().await?;
     let mut auth = owner.recv::<OtherLoan>().await?;
-    {
+    async {
         async {
             db.send::<Read>(&100).await?;
             assert_eq!(db.recv::<Value>().await?, 101);
@@ -89,7 +94,9 @@ async fn owner(
             auth.send::<Read>(&200).await?;
             assert_eq!(auth.recv::<Value>().await?, 201);
         };
+        Ok(())
     }
+    .await?;
     Ok(())
 }
 
@@ -164,7 +171,7 @@ fn owned_views_cross_actor_runtimes_and_continue_after_their_return() {
         let db_service = service_rv.enter(sid, &db_service_program).unwrap();
         let auth_service = service_rv.enter(sid, &auth_service_program).unwrap();
         let effects = Cell::new(0);
-        {
+        async {
             #[localside]
             service(db_service);
             #[localside]
@@ -173,7 +180,9 @@ fn owned_views_cross_actor_runtimes_and_continue_after_their_return() {
             worker(worker_view, &effects);
             #[localside]
             owner(owner_view, db, auth);
+            Ok(())
         }
+        .await?;
         assert_eq!(effects.get(), 2);
         Ok(())
     }

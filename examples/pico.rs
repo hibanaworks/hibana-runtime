@@ -47,8 +47,8 @@ mod embedded {
     }
 
     #[hibana_runtime::main(Events)]
-    async fn application() -> Result<(), Infallible> {
-        workload(3, 5).await
+    async fn application(work: (u32, u32)) -> Result<(), Infallible> {
+        workload(work.0, work.1).await
     }
 
     fn raw_waker() -> RawWaker {
@@ -87,7 +87,17 @@ mod embedded {
 
     #[unsafe(no_mangle)]
     pub extern "C" fn _start() -> ! {
-        application().unwrap();
+        application((3, 5)).unwrap();
+        loop {
+            wait();
+        }
+    }
+
+    // Kept by the linker as a second, independently entered core image.
+    // A real board bootstrap supplies core1's stack and launches this entry.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn core1_entry() -> ! {
+        application((7, 11)).unwrap();
         loop {
             wait();
         }

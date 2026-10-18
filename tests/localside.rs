@@ -37,12 +37,12 @@ fn run<F: Future>(future: F) -> F::Output {
 }
 
 #[test]
-fn declarations_and_the_rest_of_the_block_make_independent_progress() {
+fn declarations_and_the_rest_of_the_async_body_make_independent_progress() {
     #[localside]
     async fn program() -> Outcome<u32> {
         let ready = Cell::new(false);
         let child_done = Cell::new(false);
-        {
+        async {
             async {
                 core::future::poll_fn(|_| {
                     if ready.get() {
@@ -58,7 +58,9 @@ fn declarations_and_the_rest_of_the_block_make_independent_progress() {
             // This must run while the earlier child is Pending.
             yield_once().await;
             ready.set(true);
+            Ok(())
         }
+        .await?;
         assert!(child_done.get());
         Ok(42)
     }
@@ -70,7 +72,7 @@ fn received_owned_values_can_be_borrowed_concurrently_and_returned_after_the_sco
     struct View(u32);
     #[localside]
     async fn worker(mut left: View, mut right: View) -> Outcome<(View, View)> {
-        {
+        async {
             async {
                 let borrowed = &mut left.0;
                 yield_once().await;
@@ -83,7 +85,9 @@ fn received_owned_values_can_be_borrowed_concurrently_and_returned_after_the_sco
                 *borrowed += 2;
                 Ok::<(), &'static str>(())
             };
+            Ok(())
         }
+        .await?;
         Ok((left, right))
     }
     let (left, right) = run(worker(View(7), View(40))).unwrap();
@@ -96,7 +100,7 @@ fn a_later_declaration_starts_when_its_statement_is_reached() {
     async fn program() -> Outcome {
         let before_second = Cell::new(false);
         let second_ran = Cell::new(false);
-        {
+        async {
             async {
                 while !second_ran.get() {
                     yield_once().await;
@@ -110,7 +114,9 @@ fn a_later_declaration_starts_when_its_statement_is_reached() {
                 second_ran.set(true);
                 Ok::<(), &'static str>(())
             };
+            Ok(())
         }
+        .await?;
         Ok(())
     }
     run(program()).unwrap();
@@ -140,7 +146,7 @@ fn nested_scopes_preserve_returns_and_typed_block_values() {
             yield_once().await;
             Ok::<(), &'static str>(())
         };
-        let answer = {
+        let answer = async {
             async {
                 yield_once().await;
                 Ok::<(), &'static str>(())
@@ -148,8 +154,9 @@ fn nested_scopes_preserve_returns_and_typed_block_values() {
             if early {
                 return Ok(31);
             }
-            42
-        };
+            Ok(42)
+        }
+        .await?;
         Ok(answer)
     }
     assert_eq!(run(program(true)), Ok(31));
@@ -161,11 +168,10 @@ fn loops_labels_break_values_and_continue_survive_the_async_boundary() {
     #[localside]
     async fn program() -> Outcome<u32> {
         let count = Cell::new(0);
+        async {
+            yield_once().await;
+        };
         let answer = 'outer: loop {
-            async {
-                yield_once().await;
-                Ok::<(), &'static str>(())
-            };
             count.set(count.get() + 1);
             if count.get() < 3 {
                 continue 'outer;
@@ -181,17 +187,12 @@ fn loops_labels_break_values_and_continue_survive_the_async_boundary() {
             break 'outer inner + count.get();
         };
         let block = 'block: {
-            async {
-                yield_once().await;
-                Ok::<(), &'static str>(())
-            };
-            break 'block 7;
+            if count.get() == 3 {
+                break 'block 7;
+            }
+            0
         };
         for _ in 0..2 {
-            async {
-                yield_once().await;
-                Ok::<(), &'static str>(())
-            };
             if count.get() == 3 {
                 count.set(4);
                 continue;
@@ -294,13 +295,15 @@ fn async_values_closures_and_explicit_awaits_keep_ordinary_rust_semantics() {
 fn entry_attribute_drives_a_non_unit_result_and_scoped_borrows() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn entry(value: &mut u32) -> Outcome<u32> {
-        {
+        async {
             async {
                 yield_once().await;
                 *value = 42;
                 Ok::<(), &'static str>(())
             };
+            Ok(())
         }
+        .await?;
         Ok(*value)
     }
     let mut value = 0;
@@ -312,7 +315,7 @@ fn entry_attribute_drives_a_non_unit_result_and_scoped_borrows() {
 fn statement_bodies_infer_success_and_keep_conditional_compilation() {
     #[localside]
     async fn program(value: &mut u32) -> Outcome {
-        {
+        async {
             #[cfg(any())]
             async {
                 this_is_not_a_function();
@@ -331,7 +334,9 @@ fn statement_bodies_infer_success_and_keep_conditional_compilation() {
                     yield_once().await;
                 };
             };
+            Ok(())
         }
+        .await?;
         Ok(())
     }
     let mut value = 0;
@@ -380,12 +385,14 @@ fn named_localsides_are_constructed_at_declaration_and_driven_without_wrappers()
     async fn program() -> Outcome<u32> {
         let constructed = Cell::new(0);
         let finished = Cell::new(0);
-        {
+        async {
             #[localside]
             task(&constructed, &finished);
             #[hibana_runtime::localside]
             task(&constructed, &finished);
+            Ok(())
         }
+        .await?;
         Ok(finished.get())
     }
     assert_eq!(run(program()), Ok(42));
@@ -412,7 +419,7 @@ fn named_localsides_support_methods_paths_macros_cfg_and_cancellation() {
     #[localside]
     async fn program(finished: &Cell<u32>, drops: &Cell<u32>) -> Outcome {
         let work = Work(finished);
-        {
+        async {
             #[localside]
             #[cfg(any())]
             not_defined();
@@ -420,7 +427,9 @@ fn named_localsides_support_methods_paths_macros_cfg_and_cancellation() {
             work.execute();
             #[localside]
             future!();
+            Ok(())
         }
+        .await?;
         let pending = Never(drops);
         #[localside]
         pending;
@@ -449,4 +458,88 @@ fn constructor_error_drops_previously_declared_unpolled_futures() {
     let drops = Cell::new(0);
     assert_eq!(run(program(&drops)), Err("construct"));
     assert_eq!(drops.get(), 1);
+}
+
+#[test]
+fn ordinary_blocks_do_not_poll_or_finish_an_unawaited_async_body() {
+    #[localside]
+    async fn program() -> Outcome {
+        let completed = Cell::new(false);
+        let future = async {
+            async {
+                yield_once().await;
+                completed.set(true);
+            };
+            Ok(42)
+        };
+        {
+            let reference = &future;
+            core::hint::black_box(reference);
+        }
+        assert!(!completed.get());
+        assert_eq!(future.await?, 42);
+        assert!(completed.get());
+        Ok(())
+    }
+    run(program()).unwrap();
+}
+
+#[test]
+fn conditional_and_repeated_async_bodies_keep_explicit_await_boundaries() {
+    #[localside]
+    async fn program(enabled: bool, completed: &Cell<u32>) -> Outcome {
+        if enabled {
+            for _ in 0..3 {
+                async {
+                    async {
+                        yield_once().await;
+                        completed.set(completed.get() + 1);
+                    };
+                    async {
+                        yield_once().await;
+                        completed.set(completed.get() + 1);
+                    };
+                    Ok(())
+                }
+                .await?;
+            }
+        }
+        Ok(())
+    }
+    let completed = Cell::new(0);
+    run(program(false, &completed)).unwrap();
+    assert_eq!(completed.get(), 0);
+    run(program(true, &completed)).unwrap();
+    assert_eq!(completed.get(), 6);
+}
+
+#[test]
+fn unit_control_flow_needs_no_boilerplate_success_values() {
+    #[localside]
+    async fn program(completed: &Cell<u32>) -> Outcome {
+        async {
+            for _ in 0..2 {
+                yield_once().await;
+                completed.set(completed.get() + 1);
+            }
+        };
+        async {
+            let mut remaining = 2;
+            while remaining != 0 {
+                yield_once().await;
+                completed.set(completed.get() + 1);
+                remaining -= 1;
+            }
+        };
+        async {
+            if core::hint::black_box(true) {
+                yield_once().await;
+                completed.set(completed.get() + 1);
+            }
+        };
+        Ok(())
+    }
+    let completed = Cell::new(0);
+    run(program(&completed)).unwrap();
+    assert_eq!(completed.get(), 5);
 }

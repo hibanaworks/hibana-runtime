@@ -3,7 +3,7 @@ name = "hibana-runtime"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
-description = "A caller-stored local executor for Hibana localsides"
+description = "Caller-stored execution of Hibana localsides in each physical image"
 license = "MIT OR Apache-2.0"
 keywords = ["hibana", "no-std", "no-alloc", "async", "embedded"]
 categories = ["asynchronous", "concurrency", "embedded", "no-std::no-alloc"]
@@ -17,6 +17,9 @@ hibana-runtime-macros = { path = "macros", version = "0.1.0" }
 
 [dev-dependencies]
 hibana = "=0.9.9"
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

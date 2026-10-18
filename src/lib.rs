@@ -1,9 +1,10 @@
-//! Localsides declare work; their lexical scopes own its execution.
+//! Localsides declare work; their async bodies own its execution.
 //!
 //! In an attributed async function, `#[localside] worker(...);` declares a
 //! named localside directly. Standalone `async { ... };` statements declare
-//! inline localsides. They run concurrently with the rest of their block and
-//! finish before that block exits. Ordinary awaited expressions stay sequential.
+//! inline localsides. They run concurrently with the rest of their async body and
+//! finish before that future returns. Ordinary blocks never wait. An explicit
+//! `.await` is the completion boundary for a nested async body.
 //! Hibana remains the only owner of protocol progress and endpoint authority.
 //!
 //! ```
@@ -21,12 +22,13 @@
 //! async fn example() -> Result<(), Infallible> {
 //!     let left = Cell::new(0);
 //!     let right = Cell::new(0);
-//!     {
+//!     async {
 //!         #[localside]
 //!         write(&left, 7);
 //!         #[localside]
 //!         write(&right, 8);
-//!     }
+//!         Ok(())
+//!     }.await?;
 //!     assert_eq!((left.get(), right.get()), (7, 8));
 //!     Ok(())
 //! }

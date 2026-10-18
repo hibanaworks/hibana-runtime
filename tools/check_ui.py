@@ -11,10 +11,11 @@ CASES = {
     "separate_views": (None, '''
 #[hibana_runtime::localside]
 async fn example(mut a: hibana::Endpoint<'_, 0>, mut b: hibana::Endpoint<'_, 1>) -> Result<(), hibana::EndpointError> {
-    {
+    async {
         async { a.send::<hibana::g::Msg<1, u32>>(&7).await };
         async { b.send::<hibana::g::Msg<2, u32>>(&8).await };
-    }
+        Ok(())
+    }.await?;
     a.send::<hibana::g::Msg<3, u32>>(&9).await
 }
 '''),
@@ -64,6 +65,16 @@ async fn example() -> Result<(), ()> {
     future;
     #[localside]
     future;
+    Ok(())
+}
+'''),
+    "plain_block_is_not_an_async_boundary": ("localside declarations belong to an async body; ordinary blocks never wait", '''
+#[hibana_runtime::localside]
+async fn example() -> Result<(), ()> {
+    {
+        #[localside]
+        core::future::ready(Ok::<(), ()>(()));
+    }
     Ok(())
 }
 '''),

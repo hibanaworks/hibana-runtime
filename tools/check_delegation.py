@@ -49,15 +49,26 @@ def main():
         tests = checkout / "src/g/role_projection/tests.rs"
         tests.write_text(tests.read_text() + "\nmod runtime_localsides;\n")
         shutil.copyfile(ROOT / "fixtures/owned_views.rs", checkout / "src/g/role_projection/tests/runtime_localsides.rs")
+        remote = checkout / "src/g/role_projection/tests/runtime_localsides/remote.rs"
+        remote.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "fixtures/remote_owned.rs", remote)
+        composed = remote.parent / "remote/composed.rs"
+        composed.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "fixtures/remote_composed.rs", composed)
+        native = checkout / "src/g/role_projection/tests/native.rs"
+        native_source = native.read_text()
+        assert native_source.count("mod mailbox;") == 1
+        native.write_text(native_source.replace("mod mailbox;", "pub(super) mod mailbox;"))
         snapshot = {"source_path": str(core), "revision": revision, "fingerprints": fingerprints,
                     "checkout": str(checkout), "target": str(ROOT / f"target/delegation-{digest[:12]}"),
-                    "public_owned_projection": "guard remains enabled; internal image test only"}
+                    "public_owned_projection": "guard remains enabled; internal image test only",
+                    "test_support": "existing native mailbox module is visible to sibling integration fixtures; production code unchanged"}
         (report / "snapshot.json").write_text(json.dumps(snapshot, indent=2) + "\n")
     snapshot = json.loads((report / "snapshot.json").read_text())
     env = dict(os.environ, CARGO_TARGET_DIR=snapshot["target"], CARGO_INCREMENTAL="0",
                CARGO_PROFILE_TEST_DEBUG="0", RUSTFLAGS="--cfg hibana_repo_tests")
     command = ["cargo", "+nightly-2026-10-12", "miri", "test"] if args.miri else ["cargo", "+stable", "test"]
-    command += ["--lib", "-j", "1", "g::role_projection::tests::runtime_localsides", "--", "--test-threads=1"]
+    command += ["--lib", "-j", "1", "g::role_projection::tests::runtime_localsides", "--", "--test-threads=1", "--nocapture"]
     print(json.dumps({key: snapshot[key] for key in ("source_path", "revision", "checkout", "public_owned_projection")}), flush=True)
     subprocess.run(command, cwd=snapshot["checkout"], env=env, check=True)
 

@@ -1,168 +1,182 @@
 # hibana-runtime
 
-Write localsides and their effects. An attribute supplies execution: no task
-builder, `spawn`, `join!`, `select!`, user pinning, or completion handles.
+Write localsides with direct Endpoint operations and application effects.
+Their image supplies execution. No public task builder, `spawn`, `join!`,
+`select!`, completion handles, or user pinning.
 Rust 2024, unconditional `no_std`, no runtime allocation, caller-owned storage.
 
 ```rust
-use hibana_runtime::localside;
-
-#[localside]
-async fn worker(mut worker: Endpoint<'_, WORKER>) -> Result<(), EndpointError> {
-    let mut db = worker.recv::<Loan>().await?;
-    let mut auth = worker.recv::<AuthLoan>().await?;
-    {
-        async {
-            db.send::<Read>(&42).await?;
-            let value = db.recv::<Value>().await?;
-            record_value(value); // ordinary application effects
-        };
-        async {
-            auth.send::<Check>(&7).await?;
-            let allowed = auth.recv::<Allowed>().await?;
-            record_permission(allowed);
-        };
-    }
-    worker.send::<Loan>(db).await?;
-    worker.send::<AuthLoan>(auth).await
-}
-```
-
-This is the implemented declaration syntax. The owned-Endpoint example above
-requires the development core's unfinished delegation work; it is not a claim
-that published Hibana has completed delegation. The runnable
-[ordinary Endpoint example](examples/localsides.rs) uses published Hibana 0.9.9.
-The [owned integration fixture](fixtures/owned_views.rs) runs actual Endpoints
-against an isolated development-core copy, at its existing internal image-test
-boundary. The public owned-projection guard remains enabled.
-
-## Declaration and scope
-
-Inside a `#[localside]` async function or a `#[main(...)]` entry point, mark
-an existing future directly:
-
-```rust
-#[localside]
-worker(worker_endpoint);
-```
-
-Calls, methods, future variables, and future-valued macros need no wrapping
-`async { ...await }`. Constructors and their arguments execute at the declaration;
-they are not delayed until polling. A standalone `async { ... };` or
-`async move { ... };` declares an inline body when writing the work in place.
-Each declaration runs with
-the rest of its enclosing block. A pending child does not prevent later
-statements or other children from progressing. A later declaration starts
-when execution reaches it; it is not hoisted over earlier effects or awaits.
-
-The block owns its children and finishes them before a successful exit,
-including `return Ok(...)`, `break`, and `continue`. Closing the block releases
-their borrows, so owned views can then be sent back. A child error, a parent
-`?`/returned error, or dropping the unfinished enclosing future cancels the
-unfinished children in place. There are no detached tasks. An error is not a
-rollback of accepted communication or delegated ownership.
-
-Functions return `Result<T, E>` (including aliases). An inline child statement body
-needs no final `Ok(())`; a child with an explicit tail returns `Result<(), E>`.
-Function values, explicit `.await`, unmarked stored async values, and
-closures retain their usual Rust meaning. The attribute does not split a
-sequential function or infer independence from arbitrary Rust computation.
-Nested functions have their own attribute boundary.
-
-Application effects and localside composition stay in the source. Global
-choreography and Hibana's existing projection/kernel remain the single source
-of protocol ordering, route decisions, ownership, and permitted parallelism.
-Declarations supply executable bodies, not a second protocol or holder table.
-The execution layer owns only polling, future lifetimes, and cancellation.
-
-## Entry and platform
-
-A board or host integration supplies its wake/wait driver once at the entry
-point. The same attributes and localside signatures work on hosts and Pico.
-
-```rust
-#[hibana_runtime::main(platform_events())]
-async fn main() -> Result<(), EndpointError> {
-    // Endpoint issuance and physical resource binding belong to the platform.
+#[hibana_runtime::main(events)]
+async fn image(
+    (a, b): (Endpoint<'_, 1>, Endpoint<'_, 3>),
+    events: Events,
+) -> Result<(), EndpointError> {
     #[localside]
-    owner(owner_endpoint, db_endpoint);
+    sides::left_peer(a);
     #[localside]
-    worker(worker_endpoint);
-    #[localside]
-    service(service_endpoint);
+    sides::right_peer(b);
     Ok(())
 }
 ```
 
+This is the right-hand image in the runnable [two-image example](examples/images.rs).
+The same [global](examples/localsides/protocol.rs), containing `par` and `route`,
+and the same [localside functions](examples/localsides/sides.rs), containing
+`send`/`recv`/`offer` and effects, execute across either two OS threads or two
+actual OS processes. The other image holds roles 0 and 2. No task or Endpoint
+pointer crosses the socket.
+
+## Async bodies own execution
+
+Within an attributed function, `#[localside] future_expression;` registers an
+existing future directly. Calls, methods, future variables, and future-valued
+macros need no `async { ...await }` wrapper. A standalone `async { ... };`
+declares an inline localside when writing its operations in place.
+
+A declaration runs concurrently with the rest of its **async body**. The future
+finishes its children before successfully returning. Constructors and arguments
+execute at their source position; declarations are not hoisted over effects or
+awaits. Children may borrow caller-owned data and need not be `Send`, `'static`,
+or `Unpin`.
+
+Ordinary `{}` blocks do not introduce waiting, joining, or async destruction.
+Registrations belong directly to an async body. For a nested phase, an ordinary
+async expression gives the lifetime boundary and an explicit `.await` completes
+it. For example, after receiving two owned views:
+
+```rust
+async {
+    async {
+        db.send::<Read>(&42).await?;
+        record_value(db.recv::<Value>().await?);
+    };
+    async {
+        auth.send::<Check>(&7).await?;
+        record_permission(auth.recv::<Allowed>().await?);
+    };
+    Ok(())
+}.await?;
+worker.send::<Loan>(db).await?;
+worker.send::<AuthLoan>(auth).await?;
+```
+
+The await releases the children's borrows before returning the views. A stored
+async value does not run until polled. Conditions and loops use ordinary Rust;
+an async body inside them can contain its own declarations. Sequential code is
+not automatically split into independent computations. Closures and nested
+functions retain their own boundary; a nested function can use its own attribute.
+
+Functions return `Result<T, E>`, including aliases. Inline child bodies with no
+explicit tail infer `Ok(())`. A child error, a parent `?`/returned error, or dropping
+the unfinished enclosing future cancels unfinished local children in place.
+Early successful returns finish the children. Loop labels, break values, and
+returns use Rust's existing async boundaries; there is no synthetic exit enum or
+rewriting of ordinary block/loop exits. An error never rolls back accepted
+communication or delegated ownership. Remote failure observation belongs to the
+carrier; local cancellation is not an instantaneous distributed rollback.
+
+## Global, projection, placement
+
+Global choreography and Hibana's projection/kernel own protocol order, route
+knowledge, ownership, and permitted parallelism. The execution layer owns only
+future lifetimes, polling, and cancellation. It does not interpret the global
+a second time or track the current holder of a delegated role.
+
+Projection and initial Endpoint issuance are explicit bootstrap work:
+`project(&global)` followed by `rendezvous.enter`. The localside's Endpoint type
+infers the role, without a second numeric role mapping at projection. The global
+is independently defined outside the executing localsides. The attributes do
+not mint Endpoints or silently project remote roles.
+
+A role is a logical participant or operation right. An image is placed in a
+physical thread/core/process. Multiple roles can reside in one image. Each image
+constructs and pins its futures and kernel storage locally, and drives only its
+own localsides. Moving an execution place does not require making local-only
+Endpoint state `Send`/`Sync`. Processes and cores communicate through the carrier;
+`offer()` retains its ordinary evidence-driven branch semantics.
+
+This follows the placement boundary in `hibana-pico`: Core0 and Core1 instantiate
+their own images and communicate through SIO. Host processes use the same
+localside interface with an appropriate platform carrier. Placement supplies
+physical bindings, not another choreography or resource-owner table.
+
+## Platform and scheduling
+
+A platform supplies `Driver` once at its image entry. Its Waker must be valid
+for cross-thread/interrupt calls and retained clones, including after execution
+ends. `wait` must preserve wakes that arrived before parking. The host example
+uses socket readiness and a wake socket. The Pico link probe uses SEV/WFE.
 There is no application `Runtime::new()` or `integration.run()` interface.
-Integration implements `Driver` to supply a Waker and wait without losing a
-wake received before waiting. Interrupts, UDP readiness, and timer services
-belong to that platform boundary. This repository does not yet implement a
-production UDP/timer platform or rewrite hibana-quic.
 
-## Storage and scheduling
+Within one image, each sweep visits declared slots, polls each live future at
+most once, and rotates its starting slot. A wake requests another O(declared
+slots) sweep. Completed slots remain inline. Contiguous declarations use a binary
+carry forest, preserving source order with logarithmic storage-type depth.
+There is no fixed task capacity or runtime allocator. Macros use `syn`/`quote` on
+the build host; generated execution code uses only `core`.
 
-Future storage is inferred and inline; no fixed task capacity, allocator,
-`Send`, `'static`, or `Unpin` requirement is introduced. Rust's borrow checker
-still rejects using the same exclusive Endpoint in two children or moving it
-before its borrowing scope finishes. Pinning uses ordinary enclosing async
-state plus the entry point's internal stack pin.
-
-Each scheduler sweep traverses the declared slots, polls every live task once,
-and rotates its first slot.
-All children receive the current parent Waker, which never points into scoped
-runtime storage. A wake requests another O(declared slots) sweep. This is a small
-cooperative scheduler, with no performance superiority claim over Tokio.
-Every poll, including application computation, must return to permit progress.
-
-Contiguous declarations use a binary carry forest, preserving source order
-with logarithmic storage-type depth. Nested/interleaved declarations follow
-lexical lifetimes; no dynamic pool or mutable global registration is needed.
-The scheduler builder is an undocumented code-generation detail, not the
-application API. Macros use `syn`/`quote` on the build host; the generated
-runtime code uses only `core`.
+One image executes cooperatively: application polls must return promptly.
+Different images execute independently on their assigned workers. There is no
+claim of speed superiority over Tokio or automatic CPU parallelism inside one
+sequential Rust function.
 
 ## Run and verify
 
 ```sh
 cargo +stable run --example localsides
+cargo +stable run --example images
 python3 tools/validate.py
 ```
 
-The example executes both route choices under a parallel global, using direct
-`offer`/`send`/`recv`. The carrier and event latch allocate nothing.
-The global is independently defined in
-[protocol.rs](examples/localsides/protocol.rs). Startup explicitly calls
-`project(&global)` and `rendezvous.enter` for each Endpoint. Rust infers the
-role from the receiving localside's `Endpoint` parameter, without a second
-role-number mapping or an intermediate projection variable. [Localside bodies](examples/localsides/sides.rs) receive
-those Endpoints and contain no projection or global definition. Neither
-attribute performs projection or initial Endpoint issuance.
+The second example uses Unix datagrams on Unix hosts. The OS starts two threads
+and then two child processes; each pair executes both route choices under the
+same parallel global. Readiness drives pending Endpoint operations without a
+busy-poll loop. Host OS/driver setup uses `std` and owned OS resources; it does
+not become a dependency or heap requirement of the no_std runtime. The carrier's
+bounds come from this finite example's four frames and u32 payloads, not a
+runtime-wide capacity.
 
-Validation runs sequentially under the shared [3 GB descendant RSS
-guard](tools/resource_guard.py). Logs, memory peaks, and source hashes are kept
-in `validation/`. Rust execution, exact-code compile-fail checks, allocation
-counting, Miri, the 256-declaration executable, and Cortex-M0+ compilation/linking
-cover the implemented path. Lean and Z3 cover the unchanged scheduler arithmetic
-in independent models; they do not prove macro transformation, protocol
-correctness, pin safety, or arbitrary computation termination.
+Validation runs one job at a time under the shared [3 GB descendant RSS
+guard](tools/resource_guard.py). Logs, memory peaks, and source hashes stay in
+`validation/`. Tests cover exact borrow/move diagnostics, normal async boundaries,
+allocation counting, cancellation, retained wakers, simultaneous polls of non-Send
+futures built on different threads, actual Endpoint communication across processes,
+Miri, 256 declarations without a recursion-limit override, and Cortex-M0+ linking.
+Lean and Z3 check scoped scheduler arithmetic in independent models; they do not
+prove macro refinement, protocol correctness, or arbitrary computation termination.
 
-Prerequisites: updated stable Rust with rustfmt, clippy, and
-`thumbv6m-none-eabi`; Lean `v4.34.1`; Z3. Miri alone uses
-`nightly-2026-10-12` with `miri`/`rust-src`.
+Prerequisites: updated stable Rust with rustfmt/clippy and `thumbv6m-none-eabi`,
+Lean `v4.34.1`, and Z3. Miri alone uses `nightly-2026-10-12` with `miri`/`rust-src`.
 
-To include development-core evidence without editing its checkout:
+## Development-core boundary
+
+Ordinary Endpoint examples use published Hibana 0.9.9. Owned delegation requires
+the development core. To check the [real owned-view fixture](fixtures/owned_views.rs)
+without editing that core checkout:
 
 ```sh
 HIBANA_DELEGATION_CORE=/absolute/path/to/core python3 tools/validate.py
 ```
 
-This records the actual core revision and all source fingerprints, attaches the
-same production-lowered private images used by core's internal tests, and checks
-A-to-B-to-A across separate actor runtimes with two independent views and their
-post-return continuation. It does not disable or qualify the public guard, prove
-the whole delegation implementation, or establish QUIC integration.
+The fixture checks two independent views, A-to-B-to-A ownership transfer across
+separate actor runtimes, and post-return continuation, on host and under Miri.
+Native integration fixtures additionally exercise actual process-to-process
+owned transfer, an unread frame surviving the former holder's process exit,
+and route/resolver/par/roll composition with post-return continuation. These
+fixtures use hibana-runtime for localside scheduling and the core's existing
+Tokio-backed native test carrier for OS readiness and watchdog timers. Tokio is
+not a dependency of the runtime. The finite host image example uses no Tokio.
 
-The [Pico link probe](examples/pico.rs) executes the same attribute-generated
-path and exports its future size. It is a capacity probe with no boot block,
-vector table, hardware test, or whole-application stack high-water measurement.
+Validation records the captured core revision and dirty-source fingerprints.
+Only test setup changes in its isolated copy: integration modules are added and
+the existing native mailbox helper becomes visible to sibling tests. Production
+code and the public owned-projection guard stay unchanged. These internal tests
+do not qualify public delegation, arbitrary remote deployments, or a hibana-quic
+rewrite. The standalone two-process executable tests ordinary Endpoint traffic;
+the separate native fixtures supply the owned-transfer evidence.
+
+The [Pico link probe](examples/pico.rs) retains independent core0/core1 entries
+with local inferred future storage. It is a size/link probe with no boot block,
+vector table, core1 launch implementation, flashed-board test, or whole-application
+stack high-water measurement. Production UDP/timer platforms and the hibana-quic
+rewrite remain outside this runtime change.

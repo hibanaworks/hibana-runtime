@@ -49,7 +49,7 @@ async fn main() -> Result<(), EndpointError> {
         let left_value = Cell::new(0);
         let right_value = Cell::new(0);
 
-        {
+        async {
             #[localside]
             sides::left_peer(left_peer);
             #[localside]
@@ -58,7 +58,9 @@ async fn main() -> Result<(), EndpointError> {
             sides::left(left, alternate, &left_value);
             #[localside]
             sides::right(right, &right_value);
+            Ok(())
         }
+        .await?;
         assert_eq!(left_value.get(), if alternate { 71 } else { 8 });
         assert_eq!(right_value.get(), 84);
         println!(
