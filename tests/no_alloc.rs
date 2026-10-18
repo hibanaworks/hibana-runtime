@@ -1,0 +1,139 @@
+use core::cell::Cell;
+use core::convert::Infallible;
+use core::future::Future;
+use core::pin::{Pin, pin};
+use core::task::{Context, Poll, Waker};
+use hibana_runtime::{Executor, Task};
+use std::alloc::{GlobalAlloc, Layout, System};
+
+thread_local! {
+    static MEASURING: Cell<bool> = const { Cell::new(false) };
+    static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+struct CountingAllocator;
+
+fn record_allocation() {
+    let _ = MEASURING.try_with(|measuring| {
+        if measuring.get() {
+            let _ = ALLOCATIONS.try_with(|count| count.set(count.get() + 1));
+        }
+    });
+}
+
+// Count only this test thread's measured section, so allocations made by the
+// test harness and other threads cannot hide or create a runtime allocation.
+// SAFETY: Every operation preserves the caller's allocation contract by
+// forwarding the same pointer, layout, and size to the System allocator.
+unsafe impl GlobalAlloc for CountingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        record_allocation();
+        // SAFETY: The caller guarantees the GlobalAlloc layout contract.
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        record_allocation();
+        // SAFETY: The caller guarantees the GlobalAlloc layout contract.
+        unsafe { System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, size: usize) -> *mut u8 {
+        record_allocation();
+        // SAFETY: Forward the caller's live allocation and its valid layout.
+        unsafe { System.realloc(ptr, layout, size) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: The caller supplies a live System allocation and its layout.
+        unsafe { System.dealloc(ptr, layout) }
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
+
+fn allocations_during(f: impl FnOnce()) -> usize {
+    ALLOCATIONS.with(|count| count.set(0));
+    MEASURING.with(|measuring| measuring.set(true));
+    struct StopMeasuring;
+    impl Drop for StopMeasuring {
+        fn drop(&mut self) {
+            MEASURING.with(|measuring| measuring.set(false));
+        }
+    }
+    let guard = StopMeasuring;
+    f();
+    drop(guard);
+    ALLOCATIONS.with(Cell::get)
+}
+
+struct YieldOnce(bool);
+
+impl Future for YieldOnce {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        if self.0 {
+            Poll::Ready(())
+        } else {
+            self.0 = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
+struct PendingDrop<'a>(&'a Cell<usize>);
+
+impl Future for PendingDrop<'_> {
+    type Output = Result<(), Infallible>;
+
+    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Pending
+    }
+}
+
+impl Drop for PendingDrop<'_> {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() + 1);
+    }
+}
+
+#[test]
+fn construction_registration_run_and_cancellation_allocate_nothing() {
+    let completed = Cell::new(0);
+    let waits = Cell::new(0);
+    let cancelled = Cell::new(0);
+    let allocations = allocations_during(|| {
+        let mut first = pin!(Task::new(async {
+            YieldOnce(false).await;
+            completed.set(completed.get() + 1);
+            Ok::<_, Infallible>(())
+        }));
+        let mut second = pin!(Task::new(async {
+            YieldOnce(false).await;
+            completed.set(completed.get() + 1);
+            Ok::<_, Infallible>(())
+        }));
+        let executor = Executor::new([first.as_mut().register(), second.as_mut().register()]);
+        let result = executor.run(Waker::noop(), || waits.set(waits.get() + 1));
+        assert_eq!(result, Ok(()));
+
+        let mut pending = pin!(Task::new(PendingDrop(&cancelled)));
+        {
+            let mut executor = pin!(Executor::new([pending.as_mut().register()]));
+            assert_eq!(
+                executor
+                    .as_mut()
+                    .poll(&mut Context::from_waker(Waker::noop())),
+                Poll::Pending,
+            );
+        }
+    });
+
+    assert_eq!(allocations, 0);
+    assert_eq!(completed.get(), 2);
+    assert_eq!(waits.get(), 1);
+    assert_eq!(cancelled.get(), 1);
+}
