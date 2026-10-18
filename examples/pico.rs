@@ -12,7 +12,7 @@ mod embedded {
         ptr,
         task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
     };
-    use hibana_runtime::{Driver, Runtime};
+    use hibana_runtime::Driver;
 
     struct Work(u32);
 
@@ -34,8 +34,19 @@ mod embedded {
     // Kept by the link script so disassembly exposes the inferred storage size.
     #[unsafe(no_mangle)]
     pub extern "C" fn runtime_storage_bytes() -> usize {
-        let runtime = Runtime::new().localside(Work(0)).localside(Work(0));
-        size_of_val(&runtime)
+        size_of_val(&workload(0, 0))
+    }
+
+    #[hibana_runtime::localside]
+    async fn workload(left: u32, right: u32) -> Result<(), Infallible> {
+        async { Work(core::hint::black_box(left)).await };
+        async { Work(core::hint::black_box(right)).await };
+        Ok(())
+    }
+
+    #[hibana_runtime::main(Events)]
+    async fn application() -> Result<(), Infallible> {
+        workload(3, 5).await
     }
 
     fn raw_waker() -> RawWaker {
@@ -74,11 +85,7 @@ mod embedded {
 
     #[unsafe(no_mangle)]
     pub extern "C" fn _start() -> ! {
-        Runtime::new()
-            .localside(Work(core::hint::black_box(3)))
-            .localside(Work(core::hint::black_box(5)))
-            .run(Events)
-            .unwrap();
+        application().unwrap();
         loop {
             wait();
         }

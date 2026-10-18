@@ -3,7 +3,7 @@ use core::convert::Infallible;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use hibana_runtime::Runtime;
+use hibana_runtime::__private::Runtime;
 #[path = "support/driver.rs"]
 mod driver;
 use driver::TestDriver;
@@ -133,5 +133,34 @@ fn construction_registration_run_and_cancellation_allocate_nothing() {
     assert_eq!(allocations, 0);
     assert_eq!(completed.get(), 2);
     assert_eq!(waits.get(), 1);
+    assert_eq!(cancelled.get(), 1);
+}
+
+#[test]
+fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
+    #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
+    async fn program(completed: &Cell<u32>, cancelled: &Cell<usize>) -> Result<(), ()> {
+        {
+            async {
+                YieldOnce(false).await;
+                completed.set(completed.get() + 1);
+                Ok::<(), ()>(())
+            };
+            async {
+                YieldOnce(false).await;
+                completed.set(completed.get() + 1);
+                Ok::<(), ()>(())
+            };
+        }
+        async { PendingDrop(cancelled).await };
+        Err(())
+    }
+    let completed = Cell::new(0);
+    let cancelled = Cell::new(0);
+    assert_eq!(
+        allocations_during(|| assert_eq!(program(&completed, &cancelled), Err(()))),
+        0
+    );
+    assert_eq!(completed.get(), 2);
     assert_eq!(cancelled.get(), 1);
 }

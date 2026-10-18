@@ -15,7 +15,7 @@ use hibana::{
     g::{self, Msg},
     runtime::{SessionKitStorage, ids::SessionId, program::project},
 };
-use hibana_runtime::Runtime;
+use hibana_runtime::localside;
 use loopback::Loopback;
 use wake_latch::WakeLatch;
 
@@ -75,7 +75,8 @@ async fn right_peer(mut endpoint: Endpoint<'_, 3>) -> Result<(), EndpointError> 
     Ok(())
 }
 
-fn run(alternate: bool) {
+#[localside]
+async fn run(alternate: bool) -> Result<(), EndpointError> {
     let global = g::par(
         g::route(
             g::seq(g::send::<0, 1, Ping>(), g::send::<1, 0, Pong>()),
@@ -112,16 +113,14 @@ fn run(alternate: bool) {
     let left_value = Cell::new(0);
     let right_value = Cell::new(0);
 
-    // Pass each localside once. The runtime owns its storage and concurrency.
-    // Receivers go first to exercise simultaneous waits in the independent arms.
-    let runtime = Runtime::new()
-        .localside(left_peer(left_peer_endpoint))
-        .localside(right_peer(right_peer_endpoint))
-        .localside(left(left_endpoint, alternate, &left_value))
-        .localside(right(right_endpoint, &right_value));
-    runtime
-        .run(WakeLatch::new())
-        .expect("complete all localsides");
+    // These declarations are driven automatically in their lexical scope.
+    // Both receivers can wait without preventing either sender from running.
+    {
+        async { left_peer(left_peer_endpoint).await };
+        async { right_peer(right_peer_endpoint).await };
+        async { left(left_endpoint, alternate, &left_value).await };
+        async { right(right_endpoint, &right_value).await };
+    }
 
     assert_eq!(left_value.get(), if alternate { 71 } else { 8 });
     assert_eq!(right_value.get(), 84);
@@ -130,9 +129,11 @@ fn run(alternate: bool) {
         left_value.get(),
         right_value.get(),
     );
+    Ok(())
 }
 
-fn main() {
-    run(false);
-    run(true);
+#[hibana_runtime::main(WakeLatch::new())]
+async fn main() -> Result<(), EndpointError> {
+    run(false).await?;
+    run(true).await
 }

@@ -2,7 +2,7 @@ use core::convert::Infallible;
 use core::future::Future;
 use core::pin::{Pin, pin};
 use core::task::{Context, Poll, Waker};
-use hibana_runtime::Runtime;
+use hibana_runtime::__private::Runtime;
 #[path = "support/driver.rs"]
 mod driver;
 use driver::TestDriver;
