@@ -22,6 +22,16 @@ def sweepIndex (n first offset : Nat) : Nat :=
 def position (n first task : Nat) : Nat :=
   if task < first then n - first + task else task - first
 
+-- Runtime traverses [first, n) followed by [0, first), using inline storage.
+def splitIndex (n first offset : Nat) : Nat :=
+  if offset < n - first then first + offset else offset - (n - first)
+
+theorem split_ranges_match_sweep (n first offset : Nat)
+    (start : first < n) :
+    splitIndex n first offset = sweepIndex n first offset := by
+  unfold splitIndex sweepIndex
+  split <;> split <;> omega
+
 theorem next_in_bounds (n index : Nat) (within : index < n) :
     next n index < n := by
   unfold next
@@ -121,7 +131,42 @@ theorem increment_stays_within_usize (n index limit : Nat)
     (within : index < n) (capacity : n ≤ limit) : index + 1 ≤ limit := by
   omega
 
+-- Inferred storage uses binary carries so its Rust type does not grow as a
+-- linear chain. This independent model checks that carrying preserves the
+-- localsides' registration order; it is not a Rust layout or pin-safety proof.
+inductive Chunk where
+  | leaf (id : Nat)
+  | pair (left right : Chunk)
+
+def Chunk.values : Chunk → List Nat
+  | .leaf id => [id]
+  | .pair left right => left.values ++ right.values
+
+inductive Storage where
+  | empty
+  | vacant (tail : Storage)
+  | full (head : Chunk) (tail : Storage)
+
+def Storage.values : Storage → List Nat
+  | .empty => []
+  | .vacant tail => tail.values
+  | .full head tail => tail.values ++ head.values
+
+def insertChunk : Storage → Chunk → Storage
+  | .empty, chunk => .full chunk .empty
+  | .vacant tail, chunk => .full chunk tail
+  | .full head tail, chunk => .vacant (insertChunk tail (.pair head chunk))
+
+theorem storage_insert_preserves_order (storage : Storage) (chunk : Chunk) :
+    (insertChunk storage chunk).values = storage.values ++ chunk.values := by
+  induction storage generalizing chunk with
+  | empty => simp [insertChunk, Storage.values]
+  | vacant tail _ => simp [insertChunk, Storage.values]
+  | full head tail ih =>
+    simp [insertChunk, Storage.values, Chunk.values, ih, List.append_assoc]
+
 #print axioms next_in_bounds
+#print axioms split_ranges_match_sweep
 #print axioms last_wraps
 #print axioms sweep_starts_at_first
 #print axioms sweep_index_in_bounds
@@ -135,5 +180,6 @@ theorem increment_stays_within_usize (n index limit : Nat)
 #print axioms clear_never_reenables
 #print axioms clearMany_never_reenables
 #print axioms increment_stays_within_usize
+#print axioms storage_insert_preserves_order
 
 end HibanaRuntime.Scheduler

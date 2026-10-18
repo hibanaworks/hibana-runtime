@@ -5,11 +5,12 @@ MEMORY {
 }
 ENTRY(_start)
 SECTIONS {
-  .text : { *(.text .text.*) } > FLASH
+  .text : {
+    KEEP(*(.text.runtime_storage_bytes))
+    *(.text .text.*)
+  } > FLASH
   .rodata : {
     *(.rodata .rodata.*)
-    KEEP(*(.rodata.TASK_STORAGE_BYTES))
-    KEEP(*(.rodata.EXECUTOR_STORAGE_BYTES))
   } > FLASH
   .data : { *(.data .data.*) } > RAM AT> FLASH
   .bss (NOLOAD) : { *(.bss .bss.*) } > RAM

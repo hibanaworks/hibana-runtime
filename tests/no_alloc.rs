@@ -1,9 +1,12 @@
 use core::cell::Cell;
 use core::convert::Infallible;
 use core::future::Future;
-use core::pin::{Pin, pin};
+use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use hibana_runtime::{Executor, Task};
+use hibana_runtime::Runtime;
+#[path = "support/driver.rs"]
+mod driver;
+use driver::TestDriver;
 use std::alloc::{GlobalAlloc, Layout, System};
 
 thread_local! {
@@ -87,7 +90,7 @@ impl Future for YieldOnce {
 struct PendingDrop<'a>(&'a Cell<usize>);
 
 impl Future for PendingDrop<'_> {
-    type Output = Result<(), Infallible>;
+    type Output = Result<(), ()>;
 
     fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Pending
@@ -106,30 +109,25 @@ fn construction_registration_run_and_cancellation_allocate_nothing() {
     let waits = Cell::new(0);
     let cancelled = Cell::new(0);
     let allocations = allocations_during(|| {
-        let mut first = pin!(Task::new(async {
+        let first = async {
             YieldOnce(false).await;
             completed.set(completed.get() + 1);
             Ok::<_, Infallible>(())
-        }));
-        let mut second = pin!(Task::new(async {
+        };
+        let second = async {
             YieldOnce(false).await;
             completed.set(completed.get() + 1);
             Ok::<_, Infallible>(())
-        }));
-        let executor = Executor::new([first.as_mut().register(), second.as_mut().register()]);
-        let result = executor.run(Waker::noop(), || waits.set(waits.get() + 1));
+        };
+        let executor = Runtime::new().localside(first).localside(second);
+        let result = executor.run(TestDriver(Waker::noop(), || waits.set(waits.get() + 1)));
         assert_eq!(result, Ok(()));
 
-        let mut pending = pin!(Task::new(PendingDrop(&cancelled)));
-        {
-            let mut executor = pin!(Executor::new([pending.as_mut().register()]));
-            assert_eq!(
-                executor
-                    .as_mut()
-                    .poll(&mut Context::from_waker(Waker::noop())),
-                Poll::Pending,
-            );
-        }
+        let result = Runtime::new()
+            .localside(PendingDrop(&cancelled))
+            .localside(async { Err(()) })
+            .run(TestDriver(Waker::noop(), || unreachable!()));
+        assert_eq!(result, Err(()));
     });
 
     assert_eq!(allocations, 0);

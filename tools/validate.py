@@ -47,10 +47,11 @@ def main():
     run("host-tests", "cargo", "+stable", "test", "--all-targets", "--locked", "-j", "1")
     run("doc-tests", "cargo", "+stable", "test", "--doc", "--locked", "-j", "1")
     run("localsides", "cargo", "+stable", "run", "--example", "localsides", "--locked", "-j", "1")
+    run("registration-pressure", "cargo", "+stable", "run", "--example", "registration_pressure", "--locked", "-j", "1")
     run("thumbv6m", "cargo", "+stable", "check", "--lib", "--target", "thumbv6m-none-eabi", "--no-default-features", "--locked", "-j", "1")
     run("pico-link", "cargo", "+stable", "rustc", "--example", "pico", "--release", "--target", "thumbv6m-none-eabi", "--locked", "-j", "1", "--", "-C", "panic=abort", "-C", "link-arg=-Tpico/link.x")
     run("lean", "lean", f"+{LEAN_TOOLCHAIN}", "proofs/Scheduler.lean")
-    run("z3", "z3", "proofs/scheduler.smt2", expected=["sat", "unsat"] * 7)
+    run("z3", "z3", "proofs/scheduler.smt2", expected=["sat", "unsat"] * 8)
     run("miri", "cargo", f"+{MIRI_TOOLCHAIN}", "miri", "test", "--test", "runtime", "--locked", "-j", "1")
 
     after = {name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in files}

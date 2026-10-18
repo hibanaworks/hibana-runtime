@@ -8,52 +8,58 @@ at startup. Keep `send`, `recv`, and `offer` in that function, and protocol
 dependencies in the global choreography.
 
 ```rust
-use core::pin::pin;
-use hibana_runtime::{Executor, Task};
+use hibana_runtime::Runtime;
 
 // Integration has already attached the endpoints and supplied the driver.
-let mut owner = pin!(Task::new(owner_localside(owner_endpoint)));
-let mut worker = pin!(Task::new(worker_localside(worker_endpoint)));
-
-Executor::new([
-    owner.as_mut().register(),
-    worker.as_mut().register(),
-]).run(&waker, wait)?;
+Runtime::new()
+    .localside(owner_localside(owner_endpoint))
+    .localside(worker_localside(worker_endpoint))
+    .run(driver)?;
 ```
 
-`Task` owns the future inline. Pinning its caller-owned storage supports
-self-borrowing async state, scoped borrows, and `!Send` localsides. The
-registration borrows the pinned task exclusively and owns cancellation. The
-array determines the exact task count; there is no pool capacity to guess.
-Every localside returns `Result<(), E>` with the same error type.
+The runtime owns every future by value in inferred inline storage. `run` pins
+that storage internally before the first poll. The application writes no
+`Pin`, `pin!`, task wrapper, registration handle, or storage size. Scoped
+borrows, self-borrowing async state, and `!Send` localsides remain supported.
+Each `.localside(...)` adds exactly its future's storage; there is no pool capacity
+to guess. Every localside returns `Result<(), E>` with the same error type.
 
-The executor can also be awaited as a `Future`. `run` is the standalone entry
-point when the integration supplies a Waker and a wake-preserving wait function.
+The runtime can also be awaited as a `Future`. `run` is the standalone entry
+point when the integration supplies a configured platform driver.
 
 ## Scheduling and lifetime
 
-Each executor poll visits every live task at most once. The first slot rotates
+Each runtime poll visits every live task at most once. The first slot rotates
 between sweeps. A pending task does not prevent another task from running.
 Completion immediately drops that task's future in place and removes its
-registration. The first error drops every remaining future before returning;
-dropping an unfinished executor also cancels all its tasks.
+slot. The first error drops every remaining future before returning;
+dropping an unfinished runtime also cancels all its tasks.
 
 All live tasks receive the current driver Waker. A wake requests another sweep;
-wakes may coalesce. Each sweep costs O(task count), with O(task count) pinned
-references and no ready queue or per-task atomic storage. This deliberate tradeoff
+wakes may coalesce. Each sweep costs O(task count), with inline future storage
+and no ready queue or per-task atomic storage. Two disjoint range traversals
+preserve registration order and rotate the first task without building an
+array of task references. This deliberate tradeoff
 keeps the same implementation usable on Cortex-M0+ and hosts. Task Wakers never
-point into the scoped executor, so retaining them after cancellation is safe
+point into the scoped runtime, so retaining them after cancellation is safe
 under the driver's ordinary Waker contract.
 
-`wait` must retain a wake that arrives before it begins waiting. Thread
+Registration balances the inferred inline storage with binary carries, so
+the storage type's depth grows logarithmically. A 256-localside executable
+checks this without raising Rust's default recursion limit. This storage
+structure contains execution state only; it adds no choreography state.
+
+Platform integration implements `Driver` once; application startup passes
+that driver without constructing Wakers or wait callbacks. Its `wait` must
+retain a wake that arrives before it begins waiting. Thread
 `park`/`unpark` tokens or a properly integrated board event latch provide that
 handshake. The board or host supplies interrupt/I/O readiness and timers.
-The executor contains no device driver, network stack, timer service, thread
+The runtime contains no device driver, network stack, timer service, thread
 pool, or protocol progress state.
 
 Concurrency is cooperative: each `poll` must return. Independent computations
 can run in separate tasks and yield through futures; a long synchronous
-computation inside one poll blocks that executor. The runtime does not split
+computation inside one poll blocks that runtime. The runtime does not split
 one sequential async function into independent work.
 
 Cancellation drops local future state. It does not undo transport acceptance,
@@ -100,8 +106,10 @@ only for Miri; ordinary development and target checks use updated stable.
 Tests exercise scoped `!Send` and self-borrowing futures, simultaneous pending
 tasks, fairness, completion, failure and cancellation, pin stability, Waker
 replacement/retention, cross-thread wakeups, and a counting allocator around
-construction, registration, execution, and cancellation. Rustdoc includes an
-actual compile-fail check for duplicate registration.
+construction, registration, execution, and cancellation. Rustdoc includes
+actual compile-fail checks for moving one future twice and conflicting mutable
+borrows. The registration pressure example builds and runs 256 distinct
+localsides without a task-count annotation or a recursion-limit setting.
 
 [Lean](proofs/Scheduler.lean) and [Z3](proofs/scheduler.smt2) establish scoped
 scheduler arithmetic and live-slot removal properties in independent models.
@@ -112,7 +120,8 @@ the same small scheduler loop.
 
 The [Pico link probe](examples/pico.rs) links two tasks without `std` or an
 allocator against the RP2040 capacity map. It uses SEV/WFE for wake-before-wait
-retention and exports the task/executor storage sizes. It has no boot block,
+retention and exports a function returning the inferred runtime storage size.
+It has no boot block,
 vector table, or board setup, so it is a sizing probe rather than flashable
 firmware. Actual board execution, interrupt-driver integration, and whole
 application stack high-water measurement remain deployment checks.

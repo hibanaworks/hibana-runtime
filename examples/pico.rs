@@ -7,12 +7,12 @@ mod embedded {
     use core::{
         convert::Infallible,
         future::Future,
-        mem::size_of,
-        pin::{Pin, pin},
+        mem::size_of_val,
+        pin::Pin,
         ptr,
         task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
     };
-    use hibana_runtime::{Executor, Task};
+    use hibana_runtime::{Driver, Runtime};
 
     struct Work(u32);
 
@@ -31,13 +31,12 @@ mod embedded {
         }
     }
 
-    #[used]
+    // Kept by the link script so disassembly exposes the inferred storage size.
     #[unsafe(no_mangle)]
-    static TASK_STORAGE_BYTES: [u8; size_of::<Task<Work>>()] = [0; size_of::<Task<Work>>()];
-    #[used]
-    #[unsafe(no_mangle)]
-    static EXECUTOR_STORAGE_BYTES: [u8; size_of::<Executor<'static, Infallible, 2>>()] =
-        [0; size_of::<Executor<'static, Infallible, 2>>()];
+    pub extern "C" fn runtime_storage_bytes() -> usize {
+        let runtime = Runtime::new().localside(Work(0)).localside(Work(0));
+        size_of_val(&runtime)
+    }
 
     fn raw_waker() -> RawWaker {
         RawWaker::new(ptr::null(), &VTABLE)
@@ -59,15 +58,26 @@ mod embedded {
         unsafe { core::arch::asm!("wfe", options(nostack)) };
     }
 
+    struct Events;
+
+    impl Driver for Events {
+        fn waker(&self) -> Waker {
+            // SAFETY: callbacks ignore the null data pointer and access only
+            // the architectural event latch. Every clone is valid indefinitely.
+            unsafe { Waker::from_raw(raw_waker()) }
+        }
+
+        fn wait(&mut self) {
+            wait();
+        }
+    }
+
     #[unsafe(no_mangle)]
     pub extern "C" fn _start() -> ! {
-        let mut left = pin!(Task::new(Work(core::hint::black_box(3))));
-        let mut right = pin!(Task::new(Work(core::hint::black_box(5))));
-        // SAFETY: callbacks ignore the null data pointer and access only the
-        // architectural event latch. Every clone is valid indefinitely.
-        let waker = unsafe { Waker::from_raw(raw_waker()) };
-        Executor::new([left.as_mut().register(), right.as_mut().register()])
-            .run(&waker, wait)
+        Runtime::new()
+            .localside(Work(core::hint::black_box(3)))
+            .localside(Work(core::hint::black_box(5)))
+            .run(Events)
             .unwrap();
         loop {
             wait();

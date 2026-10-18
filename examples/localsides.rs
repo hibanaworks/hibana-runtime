@@ -5,22 +5,19 @@
 
 #[path = "support/loopback.rs"]
 mod loopback;
+#[path = "support/wake_latch.rs"]
+mod wake_latch;
 
-use core::{
-    cell::Cell,
-    pin::pin,
-    ptr,
-    sync::atomic::{AtomicBool, Ordering},
-    task::{RawWaker, RawWakerVTable, Waker},
-};
+use core::cell::Cell;
 
 use hibana::{
-    EndpointError,
+    Endpoint, EndpointError,
     g::{self, Msg},
     runtime::{SessionKitStorage, ids::SessionId, program::project},
 };
-use hibana_runtime::{Executor, Task};
+use hibana_runtime::Runtime;
 use loopback::Loopback;
+use wake_latch::WakeLatch;
 
 type Ping = Msg<1, u32>;
 type Pong = Msg<2, u32>;
@@ -34,28 +31,51 @@ const MESSAGE_COUNT: usize = 4;
 const LOCALSIDE_COUNT: usize = 4;
 type Carrier = Loopback<MESSAGE_COUNT, LOCALSIDE_COUNT>;
 
-// This closed example has no external event producer. Keep an atomic wake
-// token so a wake during a scheduler sweep survives until its wait operation.
-static READY: AtomicBool = AtomicBool::new(false);
-
-fn raw_waker() -> RawWaker {
-    RawWaker::new(ptr::null(), &WAKER_VTABLE)
+async fn left(
+    mut endpoint: Endpoint<'_, 0>,
+    alternate: bool,
+    result: &Cell<u32>,
+) -> Result<(), EndpointError> {
+    let reply = if alternate {
+        endpoint.send::<AlternatePing>(&70).await?;
+        endpoint.recv::<AlternatePong>().await?
+    } else {
+        endpoint.send::<Ping>(&7).await?;
+        endpoint.recv::<Pong>().await?
+    };
+    result.set(reply);
+    Ok(())
 }
 
-fn clone_waker(_: *const ()) -> RawWaker {
-    raw_waker()
+async fn left_peer(mut endpoint: Endpoint<'_, 1>) -> Result<(), EndpointError> {
+    let branch = endpoint.offer().await?;
+    match branch.label() {
+        1 => {
+            let value = branch.recv::<Ping>().await?;
+            endpoint.send::<Pong>(&(value + 1)).await?;
+        }
+        3 => {
+            let value = branch.recv::<AlternatePing>().await?;
+            endpoint.send::<AlternatePong>(&(value + 1)).await?;
+        }
+        _ => unreachable!("the global has exactly two route arms"),
+    }
+    Ok(())
 }
 
-fn wake(_: *const ()) {
-    READY.store(true, Ordering::Release);
+async fn right(mut endpoint: Endpoint<'_, 2>, result: &Cell<u32>) -> Result<(), EndpointError> {
+    endpoint.send::<Read>(&42).await?;
+    result.set(endpoint.recv::<Value>().await?);
+    Ok(())
 }
 
-fn drop_waker(_: *const ()) {}
-
-static WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(clone_waker, wake, wake, drop_waker);
+async fn right_peer(mut endpoint: Endpoint<'_, 3>) -> Result<(), EndpointError> {
+    let key = endpoint.recv::<Read>().await?;
+    endpoint.send::<Value>(&(key * 2)).await?;
+    Ok(())
+}
 
 fn run(alternate: bool) {
-    READY.store(false, Ordering::Release);
     let global = g::par(
         g::route(
             g::seq(g::send::<0, 1, Ping>(), g::send::<1, 0, Pong>()),
@@ -80,76 +100,27 @@ fn run(alternate: bool) {
         .rendezvous(&mut slab, Carrier::new())
         .expect("create rendezvous");
     let session = SessionId::new(1);
-    let mut left = rendezvous.enter(session, &left_program).expect("left");
-    let mut left_peer = rendezvous
+    let left_endpoint = rendezvous.enter(session, &left_program).expect("left");
+    let left_peer_endpoint = rendezvous
         .enter(session, &left_peer_program)
         .expect("left peer");
-    let mut right = rendezvous.enter(session, &right_program).expect("right");
-    let mut right_peer = rendezvous
+    let right_endpoint = rendezvous.enter(session, &right_program).expect("right");
+    let right_peer_endpoint = rendezvous
         .enter(session, &right_peer_program)
         .expect("right peer");
 
     let left_value = Cell::new(0);
     let right_value = Cell::new(0);
 
-    let mut left_task = pin!(Task::new(async {
-        let reply = if alternate {
-            left.send::<AlternatePing>(&70).await?;
-            left.recv::<AlternatePong>().await?
-        } else {
-            left.send::<Ping>(&7).await?;
-            left.recv::<Pong>().await?
-        };
-        left_value.set(reply);
-        Ok::<(), EndpointError>(())
-    }));
-
-    let mut left_peer_task = pin!(Task::new(async {
-        let branch = left_peer.offer().await?;
-        match branch.label() {
-            1 => {
-                let value = branch.recv::<Ping>().await?;
-                left_peer.send::<Pong>(&(value + 1)).await?;
-            }
-            3 => {
-                let value = branch.recv::<AlternatePing>().await?;
-                left_peer.send::<AlternatePong>(&(value + 1)).await?;
-            }
-            _ => unreachable!("the global has exactly two route arms"),
-        }
-        Ok::<(), EndpointError>(())
-    }));
-
-    let mut right_task = pin!(Task::new(async {
-        right.send::<Read>(&42).await?;
-        right_value.set(right.recv::<Value>().await?);
-        Ok::<(), EndpointError>(())
-    }));
-
-    let mut right_peer_task = pin!(Task::new(async {
-        let key = right_peer.recv::<Read>().await?;
-        right_peer.send::<Value>(&(key * 2)).await?;
-        Ok::<(), EndpointError>(())
-    }));
-
-    // Register receivers first so both independent arms really park before
-    // their senders run. Each receive installs its own task waker.
-    let executor = Executor::new([
-        left_peer_task.as_mut().register(),
-        right_peer_task.as_mut().register(),
-        left_task.as_mut().register(),
-        right_task.as_mut().register(),
-    ]);
-    // SAFETY: the callbacks only access the static atomic latch, never the
-    // unused data pointer. Clones remain valid on any thread for any lifetime.
-    let waker = unsafe { Waker::from_raw(raw_waker()) };
-    executor
-        .run(&waker, || {
-            assert!(
-                READY.swap(false, Ordering::AcqRel),
-                "the closed choreography stalled without a wake"
-            );
-        })
+    // Pass each localside once. The runtime owns its storage and concurrency.
+    // Receivers go first to exercise simultaneous waits in the independent arms.
+    let runtime = Runtime::new()
+        .localside(left_peer(left_peer_endpoint))
+        .localside(right_peer(right_peer_endpoint))
+        .localside(left(left_endpoint, alternate, &left_value))
+        .localside(right(right_endpoint, &right_value));
+    runtime
+        .run(WakeLatch::new())
         .expect("complete all localsides");
 
     assert_eq!(left_value.get(), if alternate { 71 } else { 8 });

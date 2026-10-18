@@ -1,7 +1,7 @@
 ; Independent scheduler arithmetic / slot-presence model for src/lib.rs.
 ; This is not a Rust refinement or a protocol, Waker, or pin-safety proof.
 ; Each block first checks satisfiable premises, then refutes a bad outcome.
-; Expected result sequence: (sat unsat) repeated seven times.
+; Expected result sequence: (sat unsat) repeated eight times.
 (set-logic QF_AUFLIA)
 (declare-const n Int)
 (declare-const first Int)
@@ -16,6 +16,17 @@
   (ite (< (+ first k) n) (+ first k) (- (+ first k) n)))
 (define-fun position ((i Int)) Int
   (ite (< i first) (+ (- n first) i) (- i first)))
+
+(push)
+(assert (in-range first))
+(assert (in-range offset))
+(check-sat)
+; The two range traversals have exactly the rotating sweep's order.
+(define-fun split-index ((k Int)) Int
+  (ite (< k (- n first)) (+ first k) (- k (- n first))))
+(assert (not (= (split-index offset) (sweep-index offset))))
+(check-sat)
+(pop)
 
 (push)
 (assert (> n 0))
