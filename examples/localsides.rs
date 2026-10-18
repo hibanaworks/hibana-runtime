@@ -11,7 +11,7 @@ mod wake_latch;
 use core::cell::Cell;
 
 use hibana::{
-    Endpoint, EndpointError,
+    EndpointError,
     g::{self, Msg},
     runtime::{SessionKitStorage, ids::SessionId, program::project},
 };
@@ -30,50 +30,6 @@ type Value = Msg<6, u32>;
 const MESSAGE_COUNT: usize = 4;
 const LOCALSIDE_COUNT: usize = 4;
 type Carrier = Loopback<MESSAGE_COUNT, LOCALSIDE_COUNT>;
-
-async fn left(
-    mut endpoint: Endpoint<'_, 0>,
-    alternate: bool,
-    result: &Cell<u32>,
-) -> Result<(), EndpointError> {
-    let reply = if alternate {
-        endpoint.send::<AlternatePing>(&70).await?;
-        endpoint.recv::<AlternatePong>().await?
-    } else {
-        endpoint.send::<Ping>(&7).await?;
-        endpoint.recv::<Pong>().await?
-    };
-    result.set(reply);
-    Ok(())
-}
-
-async fn left_peer(mut endpoint: Endpoint<'_, 1>) -> Result<(), EndpointError> {
-    let branch = endpoint.offer().await?;
-    match branch.label() {
-        1 => {
-            let value = branch.recv::<Ping>().await?;
-            endpoint.send::<Pong>(&(value + 1)).await?;
-        }
-        3 => {
-            let value = branch.recv::<AlternatePing>().await?;
-            endpoint.send::<AlternatePong>(&(value + 1)).await?;
-        }
-        _ => unreachable!("the global has exactly two route arms"),
-    }
-    Ok(())
-}
-
-async fn right(mut endpoint: Endpoint<'_, 2>, result: &Cell<u32>) -> Result<(), EndpointError> {
-    endpoint.send::<Read>(&42).await?;
-    result.set(endpoint.recv::<Value>().await?);
-    Ok(())
-}
-
-async fn right_peer(mut endpoint: Endpoint<'_, 3>) -> Result<(), EndpointError> {
-    let key = endpoint.recv::<Read>().await?;
-    endpoint.send::<Value>(&(key * 2)).await?;
-    Ok(())
-}
 
 #[localside]
 async fn run(alternate: bool) -> Result<(), EndpointError> {
@@ -101,12 +57,12 @@ async fn run(alternate: bool) -> Result<(), EndpointError> {
         .rendezvous(&mut slab, Carrier::new())
         .expect("create rendezvous");
     let session = SessionId::new(1);
-    let left_endpoint = rendezvous.enter(session, &left_program).expect("left");
-    let left_peer_endpoint = rendezvous
+    let mut left_endpoint = rendezvous.enter(session, &left_program).expect("left");
+    let mut left_peer_endpoint = rendezvous
         .enter(session, &left_peer_program)
         .expect("left peer");
-    let right_endpoint = rendezvous.enter(session, &right_program).expect("right");
-    let right_peer_endpoint = rendezvous
+    let mut right_endpoint = rendezvous.enter(session, &right_program).expect("right");
+    let mut right_peer_endpoint = rendezvous
         .enter(session, &right_peer_program)
         .expect("right peer");
 
@@ -116,10 +72,45 @@ async fn run(alternate: bool) -> Result<(), EndpointError> {
     // These declarations are driven automatically in their lexical scope.
     // Both receivers can wait without preventing either sender from running.
     {
-        async { left_peer(left_peer_endpoint).await };
-        async { right_peer(right_peer_endpoint).await };
-        async { left(left_endpoint, alternate, &left_value).await };
-        async { right(right_endpoint, &right_value).await };
+        // Role 1: the selected route is observed through offer().
+        async {
+            let branch = left_peer_endpoint.offer().await?;
+            match branch.label() {
+                1 => {
+                    let value = branch.recv::<Ping>().await?;
+                    left_peer_endpoint.send::<Pong>(&(value + 1)).await
+                }
+                3 => {
+                    let value = branch.recv::<AlternatePing>().await?;
+                    left_peer_endpoint.send::<AlternatePong>(&(value + 1)).await
+                }
+                _ => unreachable!("the global has exactly two route arms"),
+            }
+        };
+
+        // Role 3: this independent receiver can wait at the same time.
+        async {
+            let key = right_peer_endpoint.recv::<Read>().await?;
+            right_peer_endpoint.send::<Value>(&(key * 2)).await
+        };
+
+        // Role 0: an application decision chooses a permitted route.
+        async {
+            let reply = if alternate {
+                left_endpoint.send::<AlternatePing>(&70).await?;
+                left_endpoint.recv::<AlternatePong>().await?
+            } else {
+                left_endpoint.send::<Ping>(&7).await?;
+                left_endpoint.recv::<Pong>().await?
+            };
+            left_value.set(reply);
+        };
+
+        // Role 2: communication and application effects belong together.
+        async {
+            right_endpoint.send::<Read>(&42).await?;
+            right_value.set(right_endpoint.recv::<Value>().await?);
+        };
     }
 
     assert_eq!(left_value.get(), if alternate { 71 } else { 8 });
