@@ -1,1293 +1,531 @@
-//! 256 different localside declarations with Rust's default recursion limit.
+//! 256 distinct named localsides, with Rust's default recursion limit.
 use core::{cell::Cell, convert::Infallible};
 #[path = "support/wake_latch.rs"]
 mod wake_latch;
 use wake_latch::WakeLatch;
 
+async fn task<const SLOT: usize>(completed: &Cell<usize>) -> Result<(), Infallible> {
+    assert_eq!(completed.get(), SLOT);
+    completed.set(completed.get() + 1);
+    Ok(())
+}
+
 #[hibana_runtime::main(WakeLatch::new())]
 async fn main() -> Result<(), Infallible> {
     let completed = Cell::new(0);
     {
-        async {
-            assert_eq!(completed.get(), 0);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 1);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 2);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 3);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 4);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 5);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 6);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 7);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 8);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 9);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 10);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 11);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 12);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 13);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 14);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 15);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 16);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 17);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 18);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 19);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 20);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 21);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 22);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 23);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 24);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 25);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 26);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 27);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 28);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 29);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 30);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 31);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 32);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 33);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 34);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 35);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 36);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 37);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 38);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 39);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 40);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 41);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 42);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 43);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 44);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 45);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 46);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 47);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 48);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 49);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 50);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 51);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 52);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 53);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 54);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 55);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 56);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 57);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 58);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 59);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 60);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 61);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 62);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 63);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 64);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 65);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 66);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 67);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 68);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 69);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 70);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 71);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 72);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 73);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 74);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 75);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 76);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 77);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 78);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 79);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 80);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 81);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 82);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 83);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 84);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 85);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 86);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 87);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 88);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 89);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 90);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 91);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 92);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 93);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 94);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 95);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 96);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 97);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 98);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 99);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 100);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 101);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 102);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 103);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 104);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 105);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 106);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 107);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 108);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 109);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 110);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 111);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 112);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 113);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 114);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 115);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 116);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 117);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 118);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 119);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 120);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 121);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 122);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 123);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 124);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 125);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 126);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 127);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 128);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 129);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 130);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 131);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 132);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 133);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 134);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 135);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 136);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 137);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 138);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 139);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 140);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 141);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 142);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 143);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 144);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 145);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 146);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 147);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 148);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 149);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 150);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 151);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 152);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 153);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 154);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 155);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 156);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 157);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 158);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 159);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 160);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 161);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 162);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 163);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 164);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 165);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 166);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 167);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 168);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 169);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 170);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 171);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 172);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 173);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 174);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 175);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 176);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 177);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 178);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 179);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 180);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 181);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 182);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 183);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 184);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 185);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 186);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 187);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 188);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 189);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 190);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 191);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 192);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 193);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 194);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 195);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 196);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 197);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 198);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 199);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 200);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 201);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 202);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 203);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 204);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 205);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 206);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 207);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 208);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 209);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 210);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 211);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 212);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 213);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 214);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 215);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 216);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 217);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 218);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 219);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 220);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 221);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 222);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 223);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 224);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 225);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 226);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 227);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 228);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 229);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 230);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 231);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 232);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 233);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 234);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 235);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 236);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 237);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 238);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 239);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 240);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 241);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 242);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 243);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 244);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 245);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 246);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 247);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 248);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 249);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 250);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 251);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 252);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 253);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 254);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
-        async {
-            assert_eq!(completed.get(), 255);
-            completed.set(completed.get() + 1);
-            Ok::<(), Infallible>(())
-        };
+        #[localside]
+        task::<0>(&completed);
+        #[localside]
+        task::<1>(&completed);
+        #[localside]
+        task::<2>(&completed);
+        #[localside]
+        task::<3>(&completed);
+        #[localside]
+        task::<4>(&completed);
+        #[localside]
+        task::<5>(&completed);
+        #[localside]
+        task::<6>(&completed);
+        #[localside]
+        task::<7>(&completed);
+        #[localside]
+        task::<8>(&completed);
+        #[localside]
+        task::<9>(&completed);
+        #[localside]
+        task::<10>(&completed);
+        #[localside]
+        task::<11>(&completed);
+        #[localside]
+        task::<12>(&completed);
+        #[localside]
+        task::<13>(&completed);
+        #[localside]
+        task::<14>(&completed);
+        #[localside]
+        task::<15>(&completed);
+        #[localside]
+        task::<16>(&completed);
+        #[localside]
+        task::<17>(&completed);
+        #[localside]
+        task::<18>(&completed);
+        #[localside]
+        task::<19>(&completed);
+        #[localside]
+        task::<20>(&completed);
+        #[localside]
+        task::<21>(&completed);
+        #[localside]
+        task::<22>(&completed);
+        #[localside]
+        task::<23>(&completed);
+        #[localside]
+        task::<24>(&completed);
+        #[localside]
+        task::<25>(&completed);
+        #[localside]
+        task::<26>(&completed);
+        #[localside]
+        task::<27>(&completed);
+        #[localside]
+        task::<28>(&completed);
+        #[localside]
+        task::<29>(&completed);
+        #[localside]
+        task::<30>(&completed);
+        #[localside]
+        task::<31>(&completed);
+        #[localside]
+        task::<32>(&completed);
+        #[localside]
+        task::<33>(&completed);
+        #[localside]
+        task::<34>(&completed);
+        #[localside]
+        task::<35>(&completed);
+        #[localside]
+        task::<36>(&completed);
+        #[localside]
+        task::<37>(&completed);
+        #[localside]
+        task::<38>(&completed);
+        #[localside]
+        task::<39>(&completed);
+        #[localside]
+        task::<40>(&completed);
+        #[localside]
+        task::<41>(&completed);
+        #[localside]
+        task::<42>(&completed);
+        #[localside]
+        task::<43>(&completed);
+        #[localside]
+        task::<44>(&completed);
+        #[localside]
+        task::<45>(&completed);
+        #[localside]
+        task::<46>(&completed);
+        #[localside]
+        task::<47>(&completed);
+        #[localside]
+        task::<48>(&completed);
+        #[localside]
+        task::<49>(&completed);
+        #[localside]
+        task::<50>(&completed);
+        #[localside]
+        task::<51>(&completed);
+        #[localside]
+        task::<52>(&completed);
+        #[localside]
+        task::<53>(&completed);
+        #[localside]
+        task::<54>(&completed);
+        #[localside]
+        task::<55>(&completed);
+        #[localside]
+        task::<56>(&completed);
+        #[localside]
+        task::<57>(&completed);
+        #[localside]
+        task::<58>(&completed);
+        #[localside]
+        task::<59>(&completed);
+        #[localside]
+        task::<60>(&completed);
+        #[localside]
+        task::<61>(&completed);
+        #[localside]
+        task::<62>(&completed);
+        #[localside]
+        task::<63>(&completed);
+        #[localside]
+        task::<64>(&completed);
+        #[localside]
+        task::<65>(&completed);
+        #[localside]
+        task::<66>(&completed);
+        #[localside]
+        task::<67>(&completed);
+        #[localside]
+        task::<68>(&completed);
+        #[localside]
+        task::<69>(&completed);
+        #[localside]
+        task::<70>(&completed);
+        #[localside]
+        task::<71>(&completed);
+        #[localside]
+        task::<72>(&completed);
+        #[localside]
+        task::<73>(&completed);
+        #[localside]
+        task::<74>(&completed);
+        #[localside]
+        task::<75>(&completed);
+        #[localside]
+        task::<76>(&completed);
+        #[localside]
+        task::<77>(&completed);
+        #[localside]
+        task::<78>(&completed);
+        #[localside]
+        task::<79>(&completed);
+        #[localside]
+        task::<80>(&completed);
+        #[localside]
+        task::<81>(&completed);
+        #[localside]
+        task::<82>(&completed);
+        #[localside]
+        task::<83>(&completed);
+        #[localside]
+        task::<84>(&completed);
+        #[localside]
+        task::<85>(&completed);
+        #[localside]
+        task::<86>(&completed);
+        #[localside]
+        task::<87>(&completed);
+        #[localside]
+        task::<88>(&completed);
+        #[localside]
+        task::<89>(&completed);
+        #[localside]
+        task::<90>(&completed);
+        #[localside]
+        task::<91>(&completed);
+        #[localside]
+        task::<92>(&completed);
+        #[localside]
+        task::<93>(&completed);
+        #[localside]
+        task::<94>(&completed);
+        #[localside]
+        task::<95>(&completed);
+        #[localside]
+        task::<96>(&completed);
+        #[localside]
+        task::<97>(&completed);
+        #[localside]
+        task::<98>(&completed);
+        #[localside]
+        task::<99>(&completed);
+        #[localside]
+        task::<100>(&completed);
+        #[localside]
+        task::<101>(&completed);
+        #[localside]
+        task::<102>(&completed);
+        #[localside]
+        task::<103>(&completed);
+        #[localside]
+        task::<104>(&completed);
+        #[localside]
+        task::<105>(&completed);
+        #[localside]
+        task::<106>(&completed);
+        #[localside]
+        task::<107>(&completed);
+        #[localside]
+        task::<108>(&completed);
+        #[localside]
+        task::<109>(&completed);
+        #[localside]
+        task::<110>(&completed);
+        #[localside]
+        task::<111>(&completed);
+        #[localside]
+        task::<112>(&completed);
+        #[localside]
+        task::<113>(&completed);
+        #[localside]
+        task::<114>(&completed);
+        #[localside]
+        task::<115>(&completed);
+        #[localside]
+        task::<116>(&completed);
+        #[localside]
+        task::<117>(&completed);
+        #[localside]
+        task::<118>(&completed);
+        #[localside]
+        task::<119>(&completed);
+        #[localside]
+        task::<120>(&completed);
+        #[localside]
+        task::<121>(&completed);
+        #[localside]
+        task::<122>(&completed);
+        #[localside]
+        task::<123>(&completed);
+        #[localside]
+        task::<124>(&completed);
+        #[localside]
+        task::<125>(&completed);
+        #[localside]
+        task::<126>(&completed);
+        #[localside]
+        task::<127>(&completed);
+        #[localside]
+        task::<128>(&completed);
+        #[localside]
+        task::<129>(&completed);
+        #[localside]
+        task::<130>(&completed);
+        #[localside]
+        task::<131>(&completed);
+        #[localside]
+        task::<132>(&completed);
+        #[localside]
+        task::<133>(&completed);
+        #[localside]
+        task::<134>(&completed);
+        #[localside]
+        task::<135>(&completed);
+        #[localside]
+        task::<136>(&completed);
+        #[localside]
+        task::<137>(&completed);
+        #[localside]
+        task::<138>(&completed);
+        #[localside]
+        task::<139>(&completed);
+        #[localside]
+        task::<140>(&completed);
+        #[localside]
+        task::<141>(&completed);
+        #[localside]
+        task::<142>(&completed);
+        #[localside]
+        task::<143>(&completed);
+        #[localside]
+        task::<144>(&completed);
+        #[localside]
+        task::<145>(&completed);
+        #[localside]
+        task::<146>(&completed);
+        #[localside]
+        task::<147>(&completed);
+        #[localside]
+        task::<148>(&completed);
+        #[localside]
+        task::<149>(&completed);
+        #[localside]
+        task::<150>(&completed);
+        #[localside]
+        task::<151>(&completed);
+        #[localside]
+        task::<152>(&completed);
+        #[localside]
+        task::<153>(&completed);
+        #[localside]
+        task::<154>(&completed);
+        #[localside]
+        task::<155>(&completed);
+        #[localside]
+        task::<156>(&completed);
+        #[localside]
+        task::<157>(&completed);
+        #[localside]
+        task::<158>(&completed);
+        #[localside]
+        task::<159>(&completed);
+        #[localside]
+        task::<160>(&completed);
+        #[localside]
+        task::<161>(&completed);
+        #[localside]
+        task::<162>(&completed);
+        #[localside]
+        task::<163>(&completed);
+        #[localside]
+        task::<164>(&completed);
+        #[localside]
+        task::<165>(&completed);
+        #[localside]
+        task::<166>(&completed);
+        #[localside]
+        task::<167>(&completed);
+        #[localside]
+        task::<168>(&completed);
+        #[localside]
+        task::<169>(&completed);
+        #[localside]
+        task::<170>(&completed);
+        #[localside]
+        task::<171>(&completed);
+        #[localside]
+        task::<172>(&completed);
+        #[localside]
+        task::<173>(&completed);
+        #[localside]
+        task::<174>(&completed);
+        #[localside]
+        task::<175>(&completed);
+        #[localside]
+        task::<176>(&completed);
+        #[localside]
+        task::<177>(&completed);
+        #[localside]
+        task::<178>(&completed);
+        #[localside]
+        task::<179>(&completed);
+        #[localside]
+        task::<180>(&completed);
+        #[localside]
+        task::<181>(&completed);
+        #[localside]
+        task::<182>(&completed);
+        #[localside]
+        task::<183>(&completed);
+        #[localside]
+        task::<184>(&completed);
+        #[localside]
+        task::<185>(&completed);
+        #[localside]
+        task::<186>(&completed);
+        #[localside]
+        task::<187>(&completed);
+        #[localside]
+        task::<188>(&completed);
+        #[localside]
+        task::<189>(&completed);
+        #[localside]
+        task::<190>(&completed);
+        #[localside]
+        task::<191>(&completed);
+        #[localside]
+        task::<192>(&completed);
+        #[localside]
+        task::<193>(&completed);
+        #[localside]
+        task::<194>(&completed);
+        #[localside]
+        task::<195>(&completed);
+        #[localside]
+        task::<196>(&completed);
+        #[localside]
+        task::<197>(&completed);
+        #[localside]
+        task::<198>(&completed);
+        #[localside]
+        task::<199>(&completed);
+        #[localside]
+        task::<200>(&completed);
+        #[localside]
+        task::<201>(&completed);
+        #[localside]
+        task::<202>(&completed);
+        #[localside]
+        task::<203>(&completed);
+        #[localside]
+        task::<204>(&completed);
+        #[localside]
+        task::<205>(&completed);
+        #[localside]
+        task::<206>(&completed);
+        #[localside]
+        task::<207>(&completed);
+        #[localside]
+        task::<208>(&completed);
+        #[localside]
+        task::<209>(&completed);
+        #[localside]
+        task::<210>(&completed);
+        #[localside]
+        task::<211>(&completed);
+        #[localside]
+        task::<212>(&completed);
+        #[localside]
+        task::<213>(&completed);
+        #[localside]
+        task::<214>(&completed);
+        #[localside]
+        task::<215>(&completed);
+        #[localside]
+        task::<216>(&completed);
+        #[localside]
+        task::<217>(&completed);
+        #[localside]
+        task::<218>(&completed);
+        #[localside]
+        task::<219>(&completed);
+        #[localside]
+        task::<220>(&completed);
+        #[localside]
+        task::<221>(&completed);
+        #[localside]
+        task::<222>(&completed);
+        #[localside]
+        task::<223>(&completed);
+        #[localside]
+        task::<224>(&completed);
+        #[localside]
+        task::<225>(&completed);
+        #[localside]
+        task::<226>(&completed);
+        #[localside]
+        task::<227>(&completed);
+        #[localside]
+        task::<228>(&completed);
+        #[localside]
+        task::<229>(&completed);
+        #[localside]
+        task::<230>(&completed);
+        #[localside]
+        task::<231>(&completed);
+        #[localside]
+        task::<232>(&completed);
+        #[localside]
+        task::<233>(&completed);
+        #[localside]
+        task::<234>(&completed);
+        #[localside]
+        task::<235>(&completed);
+        #[localside]
+        task::<236>(&completed);
+        #[localside]
+        task::<237>(&completed);
+        #[localside]
+        task::<238>(&completed);
+        #[localside]
+        task::<239>(&completed);
+        #[localside]
+        task::<240>(&completed);
+        #[localside]
+        task::<241>(&completed);
+        #[localside]
+        task::<242>(&completed);
+        #[localside]
+        task::<243>(&completed);
+        #[localside]
+        task::<244>(&completed);
+        #[localside]
+        task::<245>(&completed);
+        #[localside]
+        task::<246>(&completed);
+        #[localside]
+        task::<247>(&completed);
+        #[localside]
+        task::<248>(&completed);
+        #[localside]
+        task::<249>(&completed);
+        #[localside]
+        task::<250>(&completed);
+        #[localside]
+        task::<251>(&completed);
+        #[localside]
+        task::<252>(&completed);
+        #[localside]
+        task::<253>(&completed);
+        #[localside]
+        task::<254>(&completed);
+        #[localside]
+        task::<255>(&completed);
     }
     assert_eq!(completed.get(), 256);
     Ok(())

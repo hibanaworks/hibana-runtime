@@ -138,21 +138,21 @@ fn construction_registration_run_and_cancellation_allocate_nothing() {
 
 #[test]
 fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
+    async fn effect(completed: &Cell<u32>) -> Result<(), ()> {
+        YieldOnce(false).await;
+        completed.set(completed.get() + 1);
+        Ok(())
+    }
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program(completed: &Cell<u32>, cancelled: &Cell<usize>) -> Result<(), ()> {
         {
-            async {
-                YieldOnce(false).await;
-                completed.set(completed.get() + 1);
-                Ok::<(), ()>(())
-            };
-            async {
-                YieldOnce(false).await;
-                completed.set(completed.get() + 1);
-                Ok::<(), ()>(())
-            };
+            #[localside]
+            effect(completed);
+            #[localside]
+            effect(completed);
         }
-        async { PendingDrop(cancelled).await };
+        #[localside]
+        PendingDrop(cancelled);
         Err(())
     }
     let completed = Cell::new(0);

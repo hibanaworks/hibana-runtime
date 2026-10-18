@@ -1,7 +1,8 @@
 //! Localsides declare work; their lexical scopes own its execution.
 //!
-//! In an attributed async function, standalone `async { ... };` statements
-//! declare localsides. They run concurrently with the rest of their block and
+//! In an attributed async function, `#[localside] worker(...);` declares a
+//! named localside directly. Standalone `async { ... };` statements declare
+//! inline localsides. They run concurrently with the rest of their block and
 //! finish before that block exits. Ordinary awaited expressions stay sequential.
 //! Hibana remains the only owner of protocol progress and endpoint authority.
 //!
@@ -12,13 +13,19 @@
 //! #     fn waker(&self) -> Waker { Waker::noop().clone() }
 //! #     fn wait(&mut self) {}
 //! # }
+//! async fn write(value: &Cell<u32>, next: u32) -> Result<(), Infallible> {
+//!     value.set(next);
+//!     Ok(())
+//! }
 //! #[hibana_runtime::main(Events)]
 //! async fn example() -> Result<(), Infallible> {
 //!     let left = Cell::new(0);
 //!     let right = Cell::new(0);
 //!     {
-//!         async { left.set(7); Ok::<(), Infallible>(()) };
-//!         async { right.set(8); Ok::<(), Infallible>(()) };
+//!         #[localside]
+//!         write(&left, 7);
+//!         #[localside]
+//!         write(&right, 8);
 //!     }
 //!     assert_eq!((left.get(), right.get()), (7, 8));
 //!     Ok(())

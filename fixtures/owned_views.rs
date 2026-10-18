@@ -165,10 +165,14 @@ fn owned_views_cross_actor_runtimes_and_continue_after_their_return() {
         let auth_service = service_rv.enter(sid, &auth_service_program).unwrap();
         let effects = Cell::new(0);
         {
-            async { service(db_service).await };
-            async { service(auth_service).await };
-            async { worker(worker_view, &effects).await };
-            async { owner(owner_view, db, auth).await };
+            #[localside]
+            service(db_service);
+            #[localside]
+            service(auth_service);
+            #[localside]
+            worker(worker_view, &effects);
+            #[localside]
+            owner(owner_view, db, auth);
         }
         assert_eq!(effects.get(), 2);
         Ok(())

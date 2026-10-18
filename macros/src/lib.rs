@@ -2,7 +2,9 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span, TokenStream as Tokens};
 use quote::{format_ident, quote};
 use syn::{
-    Block, Expr, ItemFn, Lifetime, ReturnType, Stmt, Type, parse_macro_input, parse_quote,
+    Attribute, Block, Expr, ItemFn, Lifetime, ReturnType, Stmt, Type,
+    parse::{ParseStream, Parser},
+    parse_macro_input, parse_quote,
     visit_mut::{self, VisitMut},
 };
 
@@ -36,9 +38,13 @@ fn expand(mut function: ItemFn, driver: Option<Expr>) -> TokenStream {
     };
     let mut lower = Lower {
         error: quote!(<#output as ::hibana_runtime::__private::Outcome>::Error),
+        diagnostics: Tokens::new(),
         next: 0,
     };
     lower.block(&mut function.block, true);
+    if !lower.diagnostics.is_empty() {
+        return lower.diagnostics.into();
+    }
     if let Some(driver) = driver {
         function.sig.asyncness = None;
         let body = function.block;
@@ -51,11 +57,46 @@ fn expand(mut function: ItemFn, driver: Option<Expr>) -> TokenStream {
 
 struct Lower {
     error: Tokens,
+    diagnostics: Tokens,
     next: usize,
+}
+
+fn is_marker(attribute: &Attribute) -> bool {
+    attribute
+        .path()
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "localside")
+}
+
+// Read the outer attributes uniformly for calls, paths, method calls, blocks,
+// and future-valued macro invocations. The input already is a parsed Rust
+// statement, so this round trip cannot accept a different source language.
+fn parts(statement: &Stmt) -> Option<(Vec<Attribute>, Expr)> {
+    let tokens = match statement {
+        Stmt::Expr(expr, Some(_)) => quote!(#expr),
+        Stmt::Macro(statement) if statement.semi_token.is_some() => {
+            let attrs = &statement.attrs;
+            let mac = &statement.mac;
+            quote!(#(#attrs)* #mac)
+        }
+        _ => return None,
+    };
+    let parser = |input: ParseStream<'_>| {
+        let attrs = Attribute::parse_outer(input)?;
+        let expr = input.parse::<Expr>()?;
+        Ok((attrs, expr))
+    };
+    Some(
+        parser
+            .parse2(tokens)
+            .expect("round trip of a parsed expression statement"),
+    )
 }
 
 fn declaration(statement: &Stmt) -> bool {
     matches!(statement, Stmt::Expr(Expr::Async(_), Some(_)))
+        || parts(statement).is_some_and(|(attrs, _)| attrs.iter().any(is_marker))
 }
 
 impl Lower {
@@ -92,12 +133,28 @@ impl Lower {
         let suffix = remaining.split_off(count);
         let declarations: Vec<_> = remaining
             .into_iter()
-            .map(|stmt| match stmt {
-                Stmt::Expr(Expr::Async(mut child), _) => {
-                    let attrs = core::mem::take(&mut child.attrs);
-                    (attrs, child)
-                }
-                _ => unreachable!(),
+            .map(|stmt| {
+                let (attrs, future) =
+                    parts(&stmt).expect("a declaration is an expression statement");
+                let attrs: Vec<_> = attrs
+                    .into_iter()
+                    .filter(|attribute| {
+                        if !is_marker(attribute) {
+                            return true;
+                        }
+                        if !matches!(attribute.meta, syn::Meta::Path(_)) {
+                            self.diagnostics.extend(
+                                syn::Error::new_spanned(
+                                    attribute,
+                                    "a localside declaration takes no arguments",
+                                )
+                                .into_compile_error(),
+                            );
+                        }
+                        false
+                    })
+                    .collect();
+                (attrs, future)
             })
             .collect();
         let task_name = format_ident!("__hibana_tasks{}", self.next, span = Span::mixed_site());

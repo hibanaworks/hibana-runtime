@@ -43,6 +43,39 @@ async fn example(mut a: hibana::Endpoint<'_, 0>) -> Result<(), hibana::EndpointE
     Ok(())
 }
 '''),
+    "named_double_borrow": ("E0499", '''
+async fn send(endpoint: &mut hibana::Endpoint<'_, 0>) -> Result<(), hibana::EndpointError> {
+    endpoint.send::<hibana::g::Msg<1, u32>>(&7).await
+}
+#[hibana_runtime::localside]
+async fn example(mut a: hibana::Endpoint<'_, 0>) -> Result<(), hibana::EndpointError> {
+    #[localside]
+    send(&mut a);
+    #[localside]
+    send(&mut a);
+    Ok(())
+}
+'''),
+    "named_moved_future": ("E0382", '''
+#[hibana_runtime::localside]
+async fn example() -> Result<(), ()> {
+    let future = async { Ok::<(), ()>(()) };
+    #[localside]
+    future;
+    #[localside]
+    future;
+    Ok(())
+}
+'''),
+    "marker_arguments": ("a localside declaration takes no arguments", '''
+#[hibana_runtime::localside]
+async fn example() -> Result<(), ()> {
+    #[localside(role = 0)]
+    core::future::ready(Ok::<(), ()>(()));
+    Ok(())
+}
+'''),
+
 }
 
 
@@ -72,7 +105,13 @@ hibana-runtime = { path = ''' + json.dumps(str(ROOT)) + " }\n")
                 errors.append(message["message"])
         (checkout / f"{name}.log").write_text(result.stdout + result.stderr)
         codes = [error["code"]["code"] for error in errors if error.get("code")]
-        if (expected is None and result.returncode != 0) or (expected is not None and (result.returncode == 0 or codes != [expected])):
+        if expected is None:
+            matches = result.returncode == 0
+        elif expected.startswith("E"):
+            matches = result.returncode != 0 and codes == [expected]
+        else:
+            matches = result.returncode != 0 and len(errors) == 1 and expected in errors[0]["message"]
+        if not matches:
             raise SystemExit(f"{name}: expected {expected}, got {codes}\n{result.stderr}\n" +
                              "\n".join(error["rendered"] for error in errors))
         print(f"{name}: {expected or 'build passed'}", flush=True)

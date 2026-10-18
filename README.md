@@ -38,8 +38,19 @@ boundary. The public owned-projection guard remains enabled.
 
 ## Declaration and scope
 
-In a `#[localside]` async function, a standalone `async { ... };` or
-`async move { ... };` statement declares an independent localside. It runs with
+Inside a `#[localside]` async function or a `#[main(...)]` entry point, mark
+an existing future directly:
+
+```rust
+#[localside]
+worker(worker_endpoint);
+```
+
+Calls, methods, future variables, and future-valued macros need no wrapping
+`async { ...await }`. Constructors and their arguments execute at the declaration;
+they are not delayed until polling. A standalone `async { ... };` or
+`async move { ... };` declares an inline body when writing the work in place.
+Each declaration runs with
 the rest of its enclosing block. A pending child does not prevent later
 statements or other children from progressing. A later declaration starts
 when execution reaches it; it is not hoisted over earlier effects or awaits.
@@ -51,8 +62,9 @@ their borrows, so owned views can then be sent back. A child error, a parent
 unfinished children in place. There are no detached tasks. An error is not a
 rollback of accepted communication or delegated ownership.
 
-Functions return `Result<T, E>` (including aliases). A child statement body
-needs no final `Ok(())`; a child with an explicit tail returns `Result<(), E>`. Function values, explicit `.await`, stored async values, and
+Functions return `Result<T, E>` (including aliases). An inline child statement body
+needs no final `Ok(())`; a child with an explicit tail returns `Result<(), E>`.
+Function values, explicit `.await`, unmarked stored async values, and
 closures retain their usual Rust meaning. The attribute does not split a
 sequential function or infer independence from arbitrary Rust computation.
 Nested functions have their own attribute boundary.
@@ -72,9 +84,12 @@ point. The same attributes and localside signatures work on hosts and Pico.
 #[hibana_runtime::main(platform_events())]
 async fn main() -> Result<(), EndpointError> {
     // Endpoint issuance and physical resource binding belong to the platform.
-    async { owner(owner_endpoint, db_endpoint).await };
-    async { worker(worker_endpoint).await };
-    async { service(service_endpoint).await };
+    #[localside]
+    owner(owner_endpoint, db_endpoint);
+    #[localside]
+    worker(worker_endpoint);
+    #[localside]
+    service(service_endpoint);
     Ok(())
 }
 ```
@@ -118,8 +133,9 @@ The example executes both route choices under a parallel global, using direct
 `offer`/`send`/`recv`. The carrier and event latch allocate nothing.
 The global is independently defined in
 [protocol.rs](examples/localsides/protocol.rs). Startup explicitly calls
-`project::<ROLE>(&global)` for every role, then issues each Endpoint with
-`rendezvous.enter`. [Localside bodies](examples/localsides/sides.rs) receive
+`project(&global)` and `rendezvous.enter` for each Endpoint. Rust infers the
+role from the receiving localside's `Endpoint` parameter, without a second
+role-number mapping or an intermediate projection variable. [Localside bodies](examples/localsides/sides.rs) receive
 those Endpoints and contain no projection or global definition. Neither
 attribute performs projection or initial Endpoint issuance.
 

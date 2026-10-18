@@ -358,3 +358,95 @@ fn infallible_errors_are_inferred_for_tail_values_and_early_returns() {
     assert_eq!(run(tail()), Ok(()));
     assert_eq!(run(early()), Ok(42));
 }
+
+#[test]
+fn named_localsides_are_constructed_at_declaration_and_driven_without_wrappers() {
+    fn task<'a>(
+        constructed: &'a Cell<u32>,
+        finished: &'a Cell<u32>,
+    ) -> impl Future<Output = Outcome> + 'a {
+        constructed.set(constructed.get() + 1);
+        async move {
+            // Both constructors must run before either future is polled.
+            assert_eq!(constructed.get(), 2);
+            let bytes = [21_u8];
+            let borrowed = &bytes[0];
+            yield_once().await;
+            finished.set(finished.get() + u32::from(*borrowed));
+            Ok(())
+        }
+    }
+    #[localside]
+    async fn program() -> Outcome<u32> {
+        let constructed = Cell::new(0);
+        let finished = Cell::new(0);
+        {
+            #[localside]
+            task(&constructed, &finished);
+            #[hibana_runtime::localside]
+            task(&constructed, &finished);
+        }
+        Ok(finished.get())
+    }
+    assert_eq!(run(program()), Ok(42));
+}
+
+#[test]
+fn named_localsides_support_methods_paths_macros_cfg_and_cancellation() {
+    struct Work<'a>(&'a Cell<u32>);
+    impl Work<'_> {
+        async fn execute(&self) -> Outcome {
+            yield_once().await;
+            self.0.set(self.0.get() + 1);
+            Ok(())
+        }
+    }
+    macro_rules! future {
+        () => {
+            async {
+                yield_once().await;
+                Ok::<(), &'static str>(())
+            }
+        };
+    }
+    #[localside]
+    async fn program(finished: &Cell<u32>, drops: &Cell<u32>) -> Outcome {
+        let work = Work(finished);
+        {
+            #[localside]
+            #[cfg(any())]
+            not_defined();
+            #[localside]
+            work.execute();
+            #[localside]
+            future!();
+        }
+        let pending = Never(drops);
+        #[localside]
+        pending;
+        Err("cancel")
+    }
+    let finished = Cell::new(0);
+    let drops = Cell::new(0);
+    assert_eq!(run(program(&finished, &drops)), Err("cancel"));
+    assert_eq!(finished.get(), 1);
+    assert_eq!(drops.get(), 1);
+}
+
+#[test]
+fn constructor_error_drops_previously_declared_unpolled_futures() {
+    fn fail() -> Outcome<Never<'static>> {
+        Err("construct")
+    }
+    #[localside]
+    async fn program(drops: &Cell<u32>) -> Outcome {
+        #[localside]
+        Never(drops);
+        #[localside]
+        fail()?;
+        Ok(())
+    }
+    let drops = Cell::new(0);
+    assert_eq!(run(program(&drops)), Err("construct"));
+    assert_eq!(drops.get(), 1);
+}
