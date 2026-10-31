@@ -239,6 +239,7 @@ impl Lower {
                         .into_compile_error(),
                     );
                 }
+                self.visit_expr_mut(&mut child.expr);
                 self.child(&mut child.body);
                 continue;
             }

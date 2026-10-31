@@ -811,6 +811,79 @@ fn an_empty_declaration_array_finishes_without_a_poll_slot() {
 }
 
 #[test]
+fn declaration_array_input_awaits_its_nested_localsides_before_returning() {
+    #[localside]
+    async fn image(done: &Cell<bool>, seen: &Cell<u8>) -> Outcome {
+        #[localside]
+        for value in (async {
+            async {
+                yield_once().await;
+                done.set(true);
+            };
+            Ok::<_, &'static str>([7, 11])
+        })
+        .await?
+        {
+            assert!(done.get());
+            seen.set(seen.get() + value);
+        }
+        assert!(done.get());
+        Ok(())
+    }
+    let done = Cell::new(false);
+    let seen = Cell::new(0);
+    assert_eq!(run(image(&done, &seen)), Ok(()));
+    assert_eq!(seen.get(), 18);
+}
+
+#[test]
+fn declaration_array_input_child_error_prevents_participant_creation() {
+    #[localside]
+    async fn image(created: &Cell<bool>) -> Outcome {
+        #[localside]
+        for _ in (async {
+            async {
+                yield_once().await;
+                Err::<(), _>("input child failed")
+            };
+            Ok::<_, &'static str>([0])
+        })
+        .await?
+        {
+            created.set(true);
+        }
+        panic!("failed array input must not run its continuation")
+    }
+    let created = Cell::new(false);
+    assert_eq!(run(image(&created)), Err("input child failed"));
+    assert!(!created.get());
+}
+
+#[test]
+fn declaration_array_input_can_return_borrows_updated_by_its_children() {
+    #[localside]
+    async fn image(values: &[Cell<u8>; 2]) -> Outcome {
+        #[localside]
+        for value in (async {
+            async {
+                yield_once().await;
+                values[0].set(7);
+                values[1].set(11);
+            };
+            Ok::<_, &'static str>(values.each_ref())
+        })
+        .await?
+        {
+            value.set(value.get() + 1);
+        }
+        Ok(())
+    }
+    let values = [Cell::new(0), Cell::new(0)];
+    assert_eq!(run(image(&values)), Ok(()));
+    assert_eq!(values.map(Cell::into_inner), [8, 12]);
+}
+
+#[test]
 fn an_array_child_failure_drops_even_unpolled_owned_inputs_once() {
     struct Input<'a> {
         index: usize,
