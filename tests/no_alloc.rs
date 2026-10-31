@@ -298,3 +298,34 @@ fn host_entry_waking_and_cancellation_allocate_nothing() {
     assert_eq!(completed.get(), 2);
     assert_eq!(cancelled.get(), 1);
 }
+
+#[cfg(feature = "host")]
+#[test]
+fn host_readiness_timers_and_timeout_cancellation_allocate_nothing() {
+    use hibana_runtime::host::{Io, deadline, sleep};
+    use std::{io, os::unix::net::UnixStream, time::Duration};
+
+    #[hibana_runtime::main]
+    async fn program(mut reader: Io, mut writer: Io) -> io::Result<()> {
+        let mut bytes = [0; 1];
+        let error =
+            hibana_runtime::race(reader.read(&mut bytes), deadline(Duration::from_millis(1)))
+                .await
+                .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        async {
+            assert_eq!(reader.read(&mut bytes).await?, 1);
+            assert_eq!(bytes[0], 8);
+        };
+        async {
+            sleep(Duration::from_millis(1)).await?;
+            writer.write_all(&[8]).await?;
+        };
+        Ok(())
+    }
+
+    let (reader, writer) = UnixStream::pair().unwrap();
+    let reader = Io::new(reader.into()).unwrap();
+    let writer = Io::new(writer.into()).unwrap();
+    assert_eq!(allocations_during(|| program(reader, writer).unwrap()), 0);
+}

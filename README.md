@@ -7,8 +7,8 @@ Rust 2024, unconditional `no_std`, no runtime allocation, caller-owned storage.
 
 The execution core has no runtime dependencies. The `host` feature supplies a
 macOS event queue using the operating system directly. It adds no async framework,
-allocator, shared resource owner or protocol cursor. Host descriptor readiness
-and timers are not implemented by this driver yet.
+allocator, shared resource owner or protocol cursor. The host module provides
+owned nonblocking descriptors, timers and deadlines for external I/O.
 
 ```rust
 #[hibana_runtime::main]
@@ -22,6 +22,45 @@ async fn main() -> Result<(), std::convert::Infallible> {
 Enable `host` for an argument-free entry point. Other platforms provide their
 own `Driver` through `#[hibana_runtime::main(driver)]`. Both use the same scoped
 scheduler. `yield_now().await` lets another localside run during a long computation.
+
+Each I/O participant owns its descriptor and buffers. With the host entry point,
+pending reads, writes and timers wake the same scoped execution:
+
+```rust
+# #[cfg(all(feature = "host", target_os = "macos"))]
+# fn example(reader: std::os::fd::OwnedFd, writer: std::os::fd::OwnedFd) -> std::io::Result<()> {
+use hibana_runtime::host::{Io, deadline, sleep};
+use std::{io, time::Duration};
+
+#[hibana_runtime::main]
+async fn image(mut reader: Io, mut writer: Io) -> io::Result<()> {
+    async {
+        let mut bytes = [0; 64];
+        let count = hibana_runtime::race(
+            reader.read(&mut bytes),
+            deadline(Duration::from_secs(5)),
+        ).await?;
+        println!("received {count} bytes");
+    };
+    async {
+        sleep(Duration::from_millis(1)).await?;
+        writer.write_all(b"ready").await?;
+    };
+    Ok(())
+}
+
+image(Io::new(reader)?, Io::new(writer)?)?;
+# Ok::<(), io::Error>(())
+# }
+```
+
+Duplicate an OS descriptor with `Io::try_clone` when separate owners need its
+read and write directions. Dropping a pending operation removes its event
+registration. Cancelling a write preserves bytes already written. Timers count
+from construction. Host operations that need to wait require the host entry
+point; another driver returns an error. Rust heap allocation is unnecessary for
+these operations, although each retained Waker and wait registration owns an OS
+descriptor. Application buffers and decoding remain with their I/O owner.
 
 ```rust
 #[hibana_runtime::main(events)]
@@ -150,8 +189,9 @@ There is no application `Runtime::new()` or `integration.run()` interface.
 
 Within one image, each sweep visits declared slots, polls each live future at
 most once, and rotates its starting slot. A wake requests another O(declared
-slots) sweep. Completed slots remain inline. The macro constructs a balanced tree of references to the futures’ final inline
-slots once, preserving source order with logarithmic storage-type depth.
+slots) sweep. Completed slots remain inline. The macro constructs a balanced
+tree of references to the futures' final inline slots once, preserving source
+order with logarithmic storage-type depth.
 There is no fixed task capacity or runtime allocator. Macros use `syn`/`quote` on
 the build host; generated execution code uses only `core`.
 
@@ -191,5 +231,5 @@ Lean `v4.34.1`, and Z3. Miri alone uses `nightly-2026-10-12` with `miri`/`rust-s
 The [Pico link probe](examples/pico.rs) retains independent core0/core1 entries
 with local inferred future storage. It is a size/link probe with no boot block,
 vector table, core1 launch implementation, flashed-board test, or whole-application
-stack high-water measurement. Production UDP/timer platforms and the hibana-quic
-rewrite remain outside this runtime change.
+stack high-water measurement. Production QUIC platform integration and the
+hibana-quic rewrite remain separate from these host I/O primitives.

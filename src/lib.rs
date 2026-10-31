@@ -65,7 +65,7 @@ extern crate std;
 
 mod executor;
 #[cfg(feature = "host")]
-mod host;
+pub mod host;
 
 pub use executor::Driver;
 pub use hibana_runtime_macros::{localside, main};
