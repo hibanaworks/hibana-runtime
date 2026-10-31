@@ -257,26 +257,29 @@ impl Lower {
                     results.extend(quote!(#(#attrs)* let #pattern = #slot.expect("completed localside produced its result");));
                     return quote!(
                         #(#attrs)* let #pending = #future;
-                        #(#attrs)* let #name = #name.localside(async {
-                            #slot = ::core::option::Option::Some(#pending.await?);
-                            ::core::result::Result::Ok::<(), #error>(())
-                        });
+                        #(#attrs)* let #name = #name.localside(
+                            ::hibana_runtime::__private::store_result(#pending, &mut #slot)
+                        );
                     );
                 }
                 let (attrs, future) = parts(&stmt).expect("declaration expression");
                 let attrs = self.attributes(attrs);
-                if matches!(future, Expr::Async(_)) {
-                    return quote!(#(#attrs)* let #name = #name.localside(#future););
+                if let Expr::Async(child) = &future {
+                    let child_attrs = &child.attrs;
+                    let capture = &child.capture;
+                    let block = &child.block;
+                    let error = &self.error;
+                    return quote!(#(#attrs)* let #name = #name.localside(
+                        #(#child_attrs)* ::hibana_runtime::__private::call_once(
+                            async #capture || -> ::core::result::Result<(), #error> #block
+                        )
+                    ););
                 }
                 let pending = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
                 self.next += 1;
-                let error = &self.error;
                 quote!(
                     #(#attrs)* let #pending = #future;
-                    #(#attrs)* let #name = #name.localside(async {
-                        #pending.await?;
-                        ::core::result::Result::Ok::<(), #error>(())
-                    });
+                    #(#attrs)* let #name = #name.localside(#pending);
                 )
             })
             .collect();

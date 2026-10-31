@@ -119,13 +119,15 @@ fn construction_registration_run_and_cancellation_allocate_nothing() {
             completed.set(completed.get() + 1);
             Ok::<_, Infallible>(())
         };
-        let executor = Runtime::new().localside(first).localside(second);
+        let executor = Runtime::<Infallible>::new()
+            .localside(first)
+            .localside(second);
         let result = executor.run(TestDriver(Waker::noop(), || waits.set(waits.get() + 1)));
         assert_eq!(result, Ok(()));
 
         let result = Runtime::new()
             .localside(PendingDrop(&cancelled))
-            .localside(async { Err(()) })
+            .localside(async { Err::<(), ()>(()) })
             .run(TestDriver(Waker::noop(), || unreachable!()));
         assert_eq!(result, Err(()));
     });
@@ -208,6 +210,42 @@ fn racing_stores_each_input_buffer_once() {
         size_of_val(&race) <= budget,
         "race uses {} bytes for {inputs} bytes of input; budget {budget}",
         size_of_val(&race)
+    );
+}
+
+#[test]
+fn localside_declarations_store_their_future_buffer_once() {
+    struct Buffered([u8; 4096]);
+    impl Future for Buffered {
+        type Output = Result<u8, Infallible>;
+        fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+            Poll::Ready(Ok(core::hint::black_box(&self.0)[0]))
+        }
+    }
+    #[hibana_runtime::localside]
+    async fn unbound() -> Result<(), Infallible> {
+        #[localside]
+        Buffered([7; 4096]);
+        Ok(())
+    }
+    #[hibana_runtime::localside]
+    async fn bound() -> Result<u8, Infallible> {
+        #[localside]
+        let value = Buffered([7; 4096]);
+        Ok(value)
+    }
+    let budget = size_of::<Buffered>() + 16 * size_of::<usize>();
+    let unbound = unbound();
+    let bound = bound();
+    assert!(
+        size_of_val(&unbound) <= budget,
+        "unbound localside uses {} bytes; budget {budget}",
+        size_of_val(&unbound)
+    );
+    assert!(
+        size_of_val(&bound) <= budget,
+        "bound localside uses {} bytes; budget {budget}",
+        size_of_val(&bound)
     );
 }
 

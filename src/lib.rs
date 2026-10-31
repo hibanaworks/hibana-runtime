@@ -113,6 +113,39 @@ struct Race<L, R> {
     left_first: bool,
 }
 
+struct StoreResult<'a, F, V> {
+    future: F,
+    output: &'a mut Option<V>,
+}
+
+impl<F, V, E> core::future::Future for StoreResult<'_, F, V>
+where
+    F: core::future::Future<Output = Result<V, E>>,
+{
+    type Output = Result<(), E>;
+
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        // SAFETY: future is a private structurally pinned field. The separate
+        // output reference is unpinned, and neither field is moved here. There
+        // is no custom Drop or Unpin implementation.
+        let (future, output) = unsafe {
+            let store = self.get_unchecked_mut();
+            (
+                core::pin::Pin::new_unchecked(&mut store.future),
+                &mut store.output,
+            )
+        };
+        future.poll(cx).map(|result| {
+            result.map(|value| {
+                **output = Some(value);
+            })
+        })
+    }
+}
+
 impl<L: core::future::Future, R: core::future::Future<Output = L::Output>> core::future::Future
     for Race<L, R>
 {
@@ -164,6 +197,17 @@ impl<L: core::future::Future, R: core::future::Future<Output = L::Output>> core:
 #[doc(hidden)]
 pub mod __private {
     pub use crate::executor::Runtime;
+
+    /// Save a completed child value without moving its future into an awaiter.
+    pub fn store_result<F, V, E>(
+        future: F,
+        output: &mut Option<V>,
+    ) -> impl core::future::Future<Output = Result<(), E>>
+    where
+        F: core::future::Future<Output = Result<V, E>>,
+    {
+        super::StoreResult { future, output }
+    }
 
     /// Consume an async closure so its returned future owns its captures.
     #[inline]

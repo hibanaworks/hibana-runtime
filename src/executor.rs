@@ -48,7 +48,7 @@ pub struct Runtime<E, T = ()> {
 }
 
 impl<E> Runtime<E> {
-    /// Start an empty runtime. Its error type is inferred from the localsides.
+    /// Start an empty runtime with the enclosing localside's error type.
     pub const fn new() -> Self {
         Self {
             tasks: (),
@@ -68,9 +68,12 @@ impl<E, T: Localsides<E>> Runtime<E, T> {
     /// Register a localside future by value without polling or allocating.
     ///
     /// Generated code supplies each future and infers its inline storage.
-    pub fn localside<F>(self, future: F) -> Runtime<E, impl Localsides<E>>
+    /// Successful unbound values are discarded; errors use the enclosing
+    /// localside's `From` conversion after the completed future is dropped.
+    pub fn localside<F, V, Error>(self, future: F) -> Runtime<E, impl Localsides<E>>
     where
-        F: Future<Output = Result<(), E>>,
+        F: Future<Output = Result<V, Error>>,
+        E: From<Error>,
     {
         Runtime {
             tasks: self.tasks.insert(private::Leaf {
@@ -198,7 +201,10 @@ mod private {
         }
     }
 
-    impl<E, F: Future<Output = Result<(), E>>> Rows<E> for Leaf<F> {
+    impl<E, V, Error, F: Future<Output = Result<V, Error>>> Rows<E> for Leaf<F>
+    where
+        E: From<Error>,
+    {
         const LEN: usize = 1;
 
         fn poll_range(
@@ -217,7 +223,7 @@ mod private {
             match future.poll(cx) {
                 Poll::Ready(result) => {
                     slot.set(None);
-                    result.map(|()| 0)
+                    result.map(|_| 0).map_err(E::from)
                 }
                 Poll::Pending => Ok(1),
             }
