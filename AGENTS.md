@@ -20,6 +20,13 @@ schedulers or conversion wrappers. Fix this runtime when direct localside code
 needs an adapter. I/O participants own their data and final I/O; the runtime
 owns polling, cancellation and waiting for children.
 
+Application localsides must not need `pin!`, `Box::pin`, `Pin` arguments or
+manual stack-size configuration. Keep each declared future in one final inline
+slot; an async adapter must not retain another copy of its input. Check future
+layout and actual consumer execution when changing storage. A larger stack is
+not a fix for duplicate storage. Pinning required by Rust's Future contract
+stays inside the runtime, with in-place polling and destruction verified by Miri.
+
 Keep the execution core `no_std`, allocation-free and caller-stored. Host support
 uses the standard library and operating-system interfaces. Do not add Tokio or
 another async framework, executor, reactor or channel crate. Syntax parsing for
