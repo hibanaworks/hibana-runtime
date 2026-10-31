@@ -188,6 +188,30 @@ fn racing_releases_the_pending_future_before_the_completed_race_is_dropped() {
 }
 
 #[test]
+fn racing_stores_each_input_buffer_once() {
+    fn buffered<const N: usize>() -> impl Future<Output = usize> {
+        let bytes = [7u8; N];
+        async move {
+            hibana_runtime::yield_now().await;
+            core::hint::black_box(bytes).len()
+        }
+    }
+    let left = buffered::<4096>();
+    let right = buffered::<2048>();
+    let inputs = size_of_val(&left) + size_of_val(&right);
+    let alignment = align_of_val(&left).max(align_of_val(&right));
+    let race = hibana_runtime::race(left, right);
+    // Two optional input slots and the polling order need only discriminants
+    // and alignment padding beyond the two buffers themselves.
+    let budget = inputs + 2 * alignment + size_of::<usize>();
+    assert!(
+        size_of_val(&race) <= budget,
+        "race uses {} bytes for {inputs} bytes of input; budget {budget}",
+        size_of_val(&race)
+    );
+}
+
+#[test]
 fn concurrent_result_bindings_allocate_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program() -> Result<(u8, u16), ()> {

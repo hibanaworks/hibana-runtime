@@ -274,6 +274,82 @@ fn cancellation_drops_a_non_unpin_future_at_its_polled_address() {
     assert_eq!(drops.get(), 1);
 }
 
+#[test]
+fn either_race_winner_cancels_a_pinned_sibling_before_returning() {
+    let (_, wake) = waker();
+    for pinned_left in [true, false] {
+        let drops = Cell::new(0);
+        let pending = PinnedProbe {
+            first_address: Cell::new(core::ptr::null()),
+            drops: &drops,
+            _pinned: core::marker::PhantomPinned,
+        };
+        let winner = async {
+            YieldOnce(false).await;
+            Ok::<(), Infallible>(())
+        };
+        if pinned_left {
+            let mut race = pin!(hibana_runtime::race(pending, winner));
+            assert_eq!(poll(race.as_mut(), &wake), Poll::Pending);
+            assert_eq!(poll(race.as_mut(), &wake), Poll::Ready(Ok(())));
+            assert_eq!(drops.get(), 1);
+        } else {
+            let mut race = pin!(hibana_runtime::race(winner, pending));
+            assert_eq!(poll(race.as_mut(), &wake), Poll::Pending);
+            assert_eq!(poll(race.as_mut(), &wake), Poll::Ready(Ok(())));
+            assert_eq!(drops.get(), 1);
+        }
+        assert_eq!(drops.get(), 1);
+    }
+}
+
+#[test]
+fn dropping_a_pending_race_preserves_its_pinned_input_address() {
+    let drops = Cell::new(0);
+    let pending = PinnedProbe {
+        first_address: Cell::new(core::ptr::null()),
+        drops: &drops,
+        _pinned: core::marker::PhantomPinned,
+    };
+    let (_, wake) = waker();
+    {
+        let mut race = pin!(hibana_runtime::race(
+            pending,
+            core::future::pending::<Result<(), Infallible>>()
+        ));
+        assert_eq!(poll(race.as_mut(), &wake), Poll::Pending);
+        assert_eq!(poll(race.as_mut(), &wake), Poll::Pending);
+        assert_eq!(drops.get(), 0);
+    }
+    assert_eq!(drops.get(), 1);
+}
+
+#[test]
+fn races_rotate_poll_order_after_pending_and_stop_at_the_winner() {
+    let (_, wake) = waker();
+    for finish_at in [1, 2] {
+        let counts = [Cell::new(0), Cell::new(0)];
+        let left = CountPolls {
+            polls: &counts[0],
+            finish_at,
+        };
+        let right = CountPolls {
+            polls: &counts[1],
+            finish_at,
+        };
+        let mut race = pin!(hibana_runtime::race(left, right));
+        if finish_at == 2 {
+            assert_eq!(poll(race.as_mut(), &wake), Poll::Pending);
+            assert_eq!(counts.each_ref().map(Cell::get), [1, 1]);
+        }
+        assert_eq!(poll(race.as_mut(), &wake), Poll::Ready(Ok(())));
+        assert_eq!(
+            counts.each_ref().map(Cell::get),
+            if finish_at == 1 { [1, 0] } else { [1, 2] }
+        );
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Failure;
 
