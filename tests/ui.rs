@@ -17,6 +17,7 @@ fn compiler_checks_exclusive_views_moves_and_scoped_borrows() -> std::io::Result
     let cases = [
         ("separate_views", None),
         ("same_view_twice", Some("E0499")),
+        ("array_double_borrow", Some("E0499")),
         ("bound_result_double_borrow", Some("E0499")),
         ("same_future_twice", Some("E0382")),
         ("move_borrowed_view", Some("E0505")),

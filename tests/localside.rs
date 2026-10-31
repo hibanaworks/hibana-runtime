@@ -776,3 +776,68 @@ fn failed_result_binding_cancels_its_pending_sibling_without_running_the_continu
     assert_eq!(run(program(&dropped)), Err("failed"));
     assert_eq!(dropped.get(), 1);
 }
+
+#[test]
+fn declared_array_localsides_overlap_and_keep_borrowed_inputs() {
+    #[localside]
+    async fn image(values: [&Cell<u8>; 3], arrived: &Cell<u8>) -> Outcome {
+        #[localside]
+        for (bit, value) in [(1, values[0]), (2, values[1]), (4, values[2])] {
+            arrived.set(arrived.get() | bit);
+            while arrived.get() != 7 {
+                yield_once().await;
+            }
+            value.set(bit);
+        }
+        Ok(())
+    }
+    let values = [Cell::new(0), Cell::new(0), Cell::new(0)];
+    let arrived = Cell::new(0);
+    run(image(values.each_ref(), &arrived)).unwrap();
+    assert_eq!(values.map(Cell::into_inner), [1, 2, 4]);
+}
+
+#[test]
+fn an_empty_declaration_array_finishes_without_a_poll_slot() {
+    #[localside]
+    async fn image(values: [u8; 0]) -> Outcome {
+        #[localside]
+        for value in values {
+            assert_eq!(value, 0);
+        }
+        Ok(())
+    }
+    run(image([])).unwrap();
+}
+
+#[test]
+fn an_array_child_failure_drops_even_unpolled_owned_inputs_once() {
+    struct Input<'a> {
+        index: usize,
+        drops: &'a [Cell<u8>; 3],
+    }
+    impl Drop for Input<'_> {
+        fn drop(&mut self) {
+            self.drops[self.index].set(self.drops[self.index].get() + 1);
+        }
+    }
+    #[localside]
+    async fn image(values: [Input; 3]) -> Outcome {
+        #[localside]
+        for value in values {
+            let owned = value;
+            if owned.index == 0 {
+                return Err("child failed");
+            }
+            core::future::pending::<()>().await;
+        }
+        Ok(())
+    }
+    let drops = core::array::from_fn(|_| Cell::new(0));
+    let values = core::array::from_fn(|index| Input {
+        index,
+        drops: &drops,
+    });
+    assert_eq!(run(image(values)), Err("child failed"));
+    assert_eq!(drops.map(Cell::into_inner), [1, 1, 1]);
+}

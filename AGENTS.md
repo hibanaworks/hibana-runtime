@@ -19,6 +19,9 @@ join trees, task/result tables, duplicate completion checks, application
 schedulers or conversion wrappers. Fix this runtime when direct localside code
 needs an adapter. I/O participants own their data and final I/O; the runtime
 owns polling, cancellation and waiting for children.
+Declare repeated participants from their actual fixed arrays. Do not make
+consumers construct task collections, spawn handles, polling loops or result
+collection loops. Ordinary unmarked Rust loops keep their sequential meaning.
 
 Application localsides must not need `pin!`, `Box::pin`, `Pin` arguments or
 manual stack-size configuration. Keep each declared future in one final inline

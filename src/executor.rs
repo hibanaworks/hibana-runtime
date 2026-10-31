@@ -192,6 +192,49 @@ mod private {
         }
     }
 
+    impl<E, F, const N: usize> Rows<E> for [Leaf<F>; N]
+    where
+        Leaf<F>: Rows<E>,
+    {
+        const LEN: usize = N;
+
+        fn poll_range(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            start: usize,
+            end: usize,
+        ) -> Result<usize, E> {
+            if start >= end {
+                return Ok(0);
+            }
+            // SAFETY: array elements are structurally pinned. Convert directly
+            // to a raw element pointer; slice indexing would create references
+            // to the entire array, including other futures' pinned borrows.
+            let rows = unsafe { self.get_unchecked_mut() } as *mut [Leaf<F>; N];
+            let rows = rows.cast::<Leaf<F>>();
+            let mut pending = 0;
+            for index in start.min(N)..end.min(N) {
+                // SAFETY: index is within the array and only this element is
+                // reborrowed. Its address remains stable and no element moves.
+                pending +=
+                    unsafe { Pin::new_unchecked(&mut *rows.add(index)) }.poll_range(cx, 0, 1)?;
+            }
+            Ok(pending)
+        }
+
+        fn cancel(self: Pin<&mut Self>) {
+            // SAFETY: retain each element's pin and avoid references to the
+            // whole array while its futures contain active self borrows.
+            let rows = unsafe { self.get_unchecked_mut() } as *mut [Leaf<F>; N];
+            let rows = rows.cast::<Leaf<F>>();
+            for index in 0..N {
+                // SAFETY: index is in bounds. Only this stable element is
+                // reborrowed and Leaf::cancel drops its future in place.
+                unsafe { Pin::new_unchecked(&mut *rows.add(index)) }.cancel();
+            }
+        }
+    }
+
     /// Generated source-ordered storage for two subtrees.
     pub struct Pair<L, R> {
         pub left: L,

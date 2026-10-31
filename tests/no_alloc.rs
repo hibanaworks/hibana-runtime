@@ -329,3 +329,33 @@ fn host_readiness_timers_and_timeout_cancellation_allocate_nothing() {
     let writer = Io::new(writer.into()).unwrap();
     assert_eq!(allocations_during(|| program(reader, writer).unwrap()), 0);
 }
+
+#[cfg(feature = "host")]
+#[test]
+fn waiting_for_an_owned_child_allocates_nothing() {
+    #[hibana_runtime::main]
+    async fn run(child: &mut hibana_runtime::host::Process) -> std::io::Result<()> {
+        assert!(child.wait().await?.success());
+        Ok(())
+    }
+    let mut child =
+        hibana_runtime::host::Process::spawn(std::process::Command::new("/bin/sleep").arg("0.01"))
+            .unwrap();
+    assert_eq!(allocations_during(|| run(&mut child).unwrap()), 0);
+}
+
+#[test]
+fn array_declarations_use_caller_storage_without_allocation() {
+    #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
+    async fn image(outputs: [&Cell<u8>; 7]) -> Result<(), Infallible> {
+        #[localside]
+        for output in outputs {
+            YieldOnce(false).await;
+            output.set(1);
+        }
+        Ok(())
+    }
+    let outputs = core::array::from_fn(|_| Cell::new(0));
+    assert_eq!(allocations_during(|| image(outputs.each_ref()).unwrap()), 0);
+    assert_eq!(outputs.map(Cell::into_inner), [1; 7]);
+}

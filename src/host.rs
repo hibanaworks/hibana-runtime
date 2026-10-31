@@ -20,6 +20,8 @@ use std::{
 
 mod descriptor;
 pub use descriptor::Io;
+mod process;
+pub use process::Process;
 
 const EVFILT_READ: i16 = -1;
 const EVFILT_WRITE: i16 = -2;

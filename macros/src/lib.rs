@@ -131,7 +131,9 @@ fn is_marker(attribute: &Attribute) -> bool {
 
 fn parts(statement: &Stmt) -> Option<(Vec<Attribute>, Expr)> {
     let tokens = match statement {
-        Stmt::Expr(expr, Some(_)) => quote!(#expr),
+        Stmt::Expr(expr, semi) if semi.is_some() || matches!(expr, Expr::ForLoop(_)) => {
+            quote!(#expr)
+        }
         Stmt::Macro(statement) if statement.semi_token.is_some() => {
             let attrs = &statement.attrs;
             let mac = &statement.mac;
@@ -202,27 +204,46 @@ impl Lower {
             .collect()
     }
 
+    fn child(&mut self, block: &mut Block) {
+        // For/while and if-without-else are unit-valued Rust statements,
+        // including when their optional semicolon is omitted.
+        let has_value = match block.stmts.last() {
+            Some(Stmt::Expr(Expr::ForLoop(_) | Expr::While(_), None)) => false,
+            Some(Stmt::Expr(Expr::If(branch), None)) => branch.else_branch.is_some(),
+            Some(Stmt::Expr(_, None)) => true,
+            _ => false,
+        };
+        if !has_value {
+            let error = &self.error;
+            block.stmts.push(Stmt::Expr(
+                parse_quote!(
+                    ::core::result::Result::Ok::<(), #error>(())
+                ),
+                None,
+            ));
+        }
+        self.body(block);
+    }
+
     fn body(&mut self, block: &mut Block) {
         for statement in &mut block.stmts {
-            if let Stmt::Expr(Expr::Async(child), Some(_)) = statement {
-                // For/while and if-without-else are unit-valued Rust
-                // statements even when their optional semicolon is omitted.
-                let has_value = match child.block.stmts.last() {
-                    Some(Stmt::Expr(Expr::ForLoop(_) | Expr::While(_), None)) => false,
-                    Some(Stmt::Expr(Expr::If(branch), None)) => branch.else_branch.is_some(),
-                    Some(Stmt::Expr(_, None)) => true,
-                    _ => false,
-                };
-                if !has_value {
-                    let error = &self.error;
-                    child.block.stmts.push(Stmt::Expr(
-                        parse_quote!(
-                            ::core::result::Result::Ok::<(), #error>(())
-                        ),
-                        None,
-                    ));
+            if let Stmt::Expr(Expr::ForLoop(child), _) = statement
+                && child.attrs.iter().any(is_marker)
+            {
+                if child.label.is_some() {
+                    self.diagnostics.extend(
+                        syn::Error::new_spanned(
+                            &child.label,
+                            "a localside declaration loop has no control-flow label",
+                        )
+                        .into_compile_error(),
+                    );
                 }
-                self.body(&mut child.block);
+                self.child(&mut child.body);
+                continue;
+            }
+            if let Stmt::Expr(Expr::Async(child), Some(_)) = statement {
+                self.child(&mut child.block);
             } else {
                 visit_mut::visit_stmt_mut(self, statement);
             }
@@ -287,6 +308,22 @@ impl Lower {
                 }
                 let (attrs, future) = parts(&stmt).expect("declaration expression");
                 let attrs = self.attributes(attrs);
+                if let Expr::ForLoop(child) = &future {
+                    let array = &child.expr;
+                    let pattern = &child.pat;
+                    let block = &child.body;
+                    let error = &self.error;
+                    let future = quote!(::hibana_runtime::__private::Runtime::<#error, _>::new(
+                        (#array).map(|#pattern| ::hibana_runtime::__private::Leaf {
+                            future: ::core::option::Option::Some(
+                                ::hibana_runtime::__private::call_once(
+                                    async move || -> ::core::result::Result<(), #error> #block
+                                )
+                            ),
+                        })
+                    ));
+                    return self.placed(&attrs, future, &mut placements);
+                }
                 if let Expr::Async(child) = &future {
                     let child_attrs = &child.attrs;
                     let capture = &child.capture;

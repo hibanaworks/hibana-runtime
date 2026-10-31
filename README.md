@@ -1,14 +1,14 @@
 # hibana-runtime
 
 Write localsides with direct Endpoint operations and application effects.
-Their image supplies execution. No public task builder, `spawn`, `join!`,
+Their image supplies execution. No task builder, task spawning, `join!`,
 `select!`, completion handles, or user pinning.
 Rust 2024, unconditional `no_std`, no runtime allocation, caller-owned storage.
 
 The execution core has no runtime dependencies. The `host` feature supplies a
 macOS event queue using the operating system directly. It adds no async framework,
 allocator, shared resource owner or protocol cursor. The host module provides
-owned nonblocking descriptors, timers and deadlines for external I/O.
+owned nonblocking descriptors, child processes, timers and deadlines for external I/O.
 
 ```rust
 #[hibana_runtime::main]
@@ -22,6 +22,23 @@ async fn main() -> Result<(), std::convert::Infallible> {
 Enable `host` for an argument-free entry point. Other platforms provide their
 own `Driver` through `#[hibana_runtime::main(driver)]`. Both use the same scoped
 scheduler. `yield_now().await` lets another localside run during a long computation.
+
+Use a declaration loop for a fixed array of participants. Each iteration becomes
+its own localside; the runtime stores and drives them together. Ordinary `for`
+loops remain sequential. Array size comes from the inputs, with no task capacity,
+spawn handles, result collection loop or heap allocation.
+
+```rust
+#[hibana_runtime::localside]
+async fn image(outputs: [&core::cell::Cell<u8>; 3]) -> Result<(), core::convert::Infallible> {
+    #[localside]
+    for output in outputs {
+        hibana_runtime::yield_now().await;
+        output.set(7);
+    }
+    Ok(())
+}
+```
 
 Each I/O participant owns its descriptor and buffers. With the host entry point,
 pending reads, writes and timers wake the same scoped execution:
@@ -61,6 +78,13 @@ from construction. Host operations that need to wait require the host entry
 point; another driver returns an error. Rust heap allocation is unnecessary for
 these operations, although each retained Waker and wait registration owns an OS
 descriptor. Application buffers and decoding remain with their I/O owner.
+
+`host::Process::spawn` starts an OS command with its configured environment and
+stdio. Give its piped stdin and stdout to I/O owners with `process.io()`, then
+await `process.wait()` alongside them. Cancelling that wait removes its event
+registration and leaves the process alive. Dropping the process owner terminates
+and reaps the child. The wait itself requires no Rust heap allocation; command
+construction and starting an OS process use the standard library.
 
 ```rust
 #[hibana_runtime::main(events)]
@@ -231,5 +255,4 @@ Lean `v4.34.1`, and Z3. Miri alone uses `nightly-2026-10-12` with `miri`/`rust-s
 The [Pico link probe](examples/pico.rs) retains independent core0/core1 entries
 with local inferred future storage. It is a size/link probe with no boot block,
 vector table, core1 launch implementation, flashed-board test, or whole-application
-stack high-water measurement. Production QUIC platform integration and the
-hibana-quic rewrite remain separate from these host I/O primitives.
+stack high-water measurement.

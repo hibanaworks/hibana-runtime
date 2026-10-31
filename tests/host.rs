@@ -251,3 +251,98 @@ fn a_timer_starts_at_construction_and_zero_duration_is_ready() {
     std::thread::sleep(Duration::from_millis(5));
     run(timer).unwrap();
 }
+
+#[hibana_runtime::main]
+#[test]
+async fn owned_child_wait_reports_the_real_exit_status() -> io::Result<()> {
+    use hibana_runtime::host::Process;
+    let mut child = Process::spawn(std::process::Command::new("/bin/sh").args(["-c", "exit 7"]))?;
+    let status = hibana_runtime::race(child.wait(), deadline(Duration::from_secs(2))).await?;
+    assert_eq!(status.code(), Some(7));
+    assert_eq!(child.wait().await?.code(), Some(7));
+    Ok(())
+}
+
+#[hibana_runtime::main]
+#[test]
+async fn child_pipes_and_exit_wait_progress_concurrently() -> io::Result<()> {
+    use hibana_runtime::host::Process;
+    use std::process::{Command, Stdio};
+    let mut child = Process::spawn(
+        Command::new("/bin/cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped()),
+    )?;
+    let (mut input, mut output) = child.io()?;
+    let bytes: Vec<_> = (0..128 * 1024).map(|n| n as u8).collect();
+    async move {
+        input.write_all(&bytes).await?;
+        drop(input);
+    };
+    async {
+        let mut bytes = [0; 4096];
+        let mut received = 0;
+        loop {
+            let count = output.read(&mut bytes).await?;
+            if count == 0 {
+                break;
+            }
+            for (index, byte) in bytes[..count].iter().enumerate() {
+                assert_eq!(*byte, (received + index) as u8);
+            }
+            received += count;
+        }
+        assert_eq!(received, 128 * 1024);
+    };
+    async {
+        assert!(child.wait().await?.success());
+    };
+    Ok(())
+}
+
+#[hibana_runtime::main]
+#[test]
+async fn cancelling_a_child_wait_leaves_the_owned_process_available() -> io::Result<()> {
+    use hibana_runtime::host::Process;
+    let mut child = Process::spawn(std::process::Command::new("/bin/sleep").arg("0.05"))?;
+    let error = hibana_runtime::race(child.wait(), deadline(Duration::from_millis(1)))
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    assert!(
+        hibana_runtime::race(child.wait(), deadline(Duration::from_secs(2)))
+            .await?
+            .success()
+    );
+    Ok(())
+}
+
+#[test]
+fn dropping_the_process_owner_terminates_and_reaps_the_child() {
+    use hibana_runtime::host::Process;
+    let child = Process::spawn(std::process::Command::new("/bin/sleep").arg("60")).unwrap();
+    let id = child.id();
+    drop(child);
+    let mut status = 0;
+    // SAFETY: waitpid writes one int. A reaped child must no longer be waitable.
+    let result = unsafe { libc::waitpid(id as i32, &mut status, libc::WNOHANG) };
+    assert_eq!(result, -1);
+    assert_eq!(
+        io::Error::last_os_error().raw_os_error(),
+        Some(libc::ECHILD)
+    );
+}
+
+#[hibana_runtime::main]
+#[test]
+async fn short_lived_children_are_reaped_when_exit_races_registration() -> io::Result<()> {
+    use hibana_runtime::host::Process;
+    for value in 0..64 {
+        let mut child = Process::spawn(
+            std::process::Command::new("/bin/sh").args(["-c", &format!("exit {value}")]),
+        )?;
+        let status = hibana_runtime::race(child.wait(), deadline(Duration::from_secs(2))).await?;
+        assert_eq!(status.code(), Some(value));
+    }
+    Ok(())
+}

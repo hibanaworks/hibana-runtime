@@ -594,3 +594,56 @@ fn empty_executor_completes_without_waiting() {
         Ok(())
     );
 }
+
+#[test]
+fn array_storage_preserves_pinned_addresses_through_rotation_and_drop() {
+    let drops = Cell::new(0);
+    let rows: [_; 7] = core::array::from_fn(|_| hibana_runtime::__private::Leaf {
+        future: Some(PinnedProbe {
+            first_address: Cell::new(core::ptr::null()),
+            drops: &drops,
+            _pinned: core::marker::PhantomPinned,
+        }),
+    });
+    let (_, wake) = waker();
+    {
+        let mut executor = pin!(hibana_runtime::__private::Runtime::<Infallible, _>::new(
+            rows
+        ));
+        for _ in 0..14 {
+            assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
+        }
+    }
+    assert_eq!(drops.get(), 7);
+}
+
+#[test]
+fn array_sweeps_visit_each_live_slot_once_in_rotating_order() {
+    fn check<const N: usize>() {
+        let order = RefCell::new(Vec::new());
+        let rows: [_; N] = core::array::from_fn(|index| hibana_runtime::__private::Leaf {
+            future: Some(RecordPoll {
+                id: index as u8,
+                order: &order,
+            }),
+        });
+        let mut executor = pin!(hibana_runtime::__private::Runtime::<Infallible, _>::new(
+            rows
+        ));
+        let (_, wake) = waker();
+        if N == 0 {
+            assert_eq!(poll(executor.as_mut(), &wake), Poll::Ready(Ok(())));
+        } else {
+            for start in 0..2 * N {
+                assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
+                let expected: Vec<_> = (0..N).map(|offset| ((start + offset) % N) as u8).collect();
+                assert_eq!(*order.borrow(), expected);
+                order.borrow_mut().clear();
+            }
+        }
+    }
+    check::<0>();
+    check::<1>();
+    check::<3>();
+    check::<7>();
+}
