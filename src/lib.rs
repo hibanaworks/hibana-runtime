@@ -118,6 +118,37 @@ struct StoreResult<'a, F, V> {
     output: &'a mut Option<V>,
 }
 
+struct Placed<'a, F> {
+    future: core::pin::Pin<&'a mut Option<F>>,
+}
+
+impl<F: core::future::Future> core::future::Future for Placed<'_, F> {
+    type Output = F::Output;
+
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        let placed = self.get_mut();
+        let result = placed
+            .future
+            .as_mut()
+            .as_pin_mut()
+            .expect("a completed localside cannot be polled again")
+            .poll(cx);
+        if result.is_ready() {
+            placed.future.set(None);
+        }
+        result
+    }
+}
+
+impl<F> Drop for Placed<'_, F> {
+    fn drop(&mut self) {
+        self.future.set(None);
+    }
+}
+
 impl<F, V, E> core::future::Future for StoreResult<'_, F, V>
 where
     F: core::future::Future<Output = Result<V, E>>,
@@ -196,7 +227,15 @@ impl<L: core::future::Future, R: core::future::Future<Output = L::Output>> core:
 /// Implementation details used by generated code, not an application API.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::executor::Runtime;
+    pub use crate::executor::{Leaf, Pair, Runtime};
+
+    /// Borrow a future's final inline slot, dropping it in place on completion
+    /// or cancellation. Storage construction moves only this reference.
+    pub fn placed<F: core::future::Future>(
+        future: core::pin::Pin<&mut Option<F>>,
+    ) -> impl core::future::Future<Output = F::Output> {
+        super::Placed { future }
+    }
 
     /// Save a completed child value without moving its future into an awaiter.
     pub fn store_result<F, V, E>(

@@ -1,7 +1,7 @@
 import Std
 
 /-!
-An independent mathematical model of the scheduler loop in `src/lib.rs`.
+An independent mathematical model of the scheduler loop in `src/executor.rs`.
 
 `next` is the Rust wrap branch; `sweepIndex` is its closed form for a single
 N-slot sweep. A live slot models `Some(Registration)`, and clearing models
@@ -131,39 +131,46 @@ theorem increment_stays_within_usize (n index limit : Nat)
     (within : index < n) (capacity : n ≤ limit) : index + 1 ≤ limit := by
   omega
 
--- Inferred storage uses binary carries so its Rust type does not grow as a
--- linear chain. This independent model checks that carrying preserves the
--- localsides' registration order; it is not a Rust layout or pin-safety proof.
-inductive Chunk where
-  | leaf (id : Nat)
-  | pair (left right : Chunk)
-
-def Chunk.values : Chunk → List Nat
-  | .leaf id => [id]
-  | .pair left right => left.values ++ right.values
-
+-- The macro splits declarations into two contiguous halves and constructs
+-- their storage once. This model checks source order, not Rust placement,
+-- macro refinement, pin safety or physical stack consumption.
 inductive Storage where
   | empty
-  | vacant (tail : Storage)
-  | full (head : Chunk) (tail : Storage)
+  | leaf (id : Nat)
+  | pair (left right : Storage)
 
 def Storage.values : Storage → List Nat
   | .empty => []
-  | .vacant tail => tail.values
-  | .full head tail => tail.values ++ head.values
+  | .leaf id => [id]
+  | .pair left right => left.values ++ right.values
 
-def insertChunk : Storage → Chunk → Storage
-  | .empty, chunk => .full chunk .empty
-  | .vacant tail, chunk => .full chunk tail
-  | .full head tail, chunk => .vacant (insertChunk tail (.pair head chunk))
+def Storage.build (values : List Nat) : Storage :=
+  if values.length ≤ 1 then
+    match values with
+    | [] => .empty
+    | id :: _ => .leaf id
+  else
+    let middle := values.length / 2
+    .pair (Storage.build (values.take middle)) (Storage.build (values.drop middle))
+termination_by values.length
+decreasing_by all_goals simp_wf; omega
 
-theorem storage_insert_preserves_order (storage : Storage) (chunk : Chunk) :
-    (insertChunk storage chunk).values = storage.values ++ chunk.values := by
-  induction storage generalizing chunk with
-  | empty => simp [insertChunk, Storage.values]
-  | vacant tail _ => simp [insertChunk, Storage.values]
-  | full head tail ih =>
-    simp [insertChunk, Storage.values, Chunk.values, ih, List.append_assoc]
+theorem balanced_storage_preserves_order (values : List Nat) :
+    (Storage.build values).values = values := by
+  rw [Storage.build.eq_def]
+  split
+  · rename_i small
+    cases values with
+    | nil => rfl
+    | cons id rest =>
+      cases rest with
+      | nil => rfl
+      | cons next rest => simp at small
+  · simp only [Storage.values]
+    rw [balanced_storage_preserves_order (values.take _),
+        balanced_storage_preserves_order (values.drop _), List.take_append_drop]
+termination_by values.length
+decreasing_by all_goals simp_wf; omega
 
 #print axioms next_in_bounds
 #print axioms split_ranges_match_sweep
@@ -180,6 +187,6 @@ theorem storage_insert_preserves_order (storage : Storage) (chunk : Chunk) :
 #print axioms clear_never_reenables
 #print axioms clearMany_never_reenables
 #print axioms increment_stays_within_usize
-#print axioms storage_insert_preserves_order
+#print axioms balanced_storage_preserves_order
 
 end HibanaRuntime.Scheduler

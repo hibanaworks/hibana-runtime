@@ -150,8 +150,8 @@ There is no application `Runtime::new()` or `integration.run()` interface.
 
 Within one image, each sweep visits declared slots, polls each live future at
 most once, and rotates its starting slot. A wake requests another O(declared
-slots) sweep. Completed slots remain inline. Contiguous declarations use a binary
-carry forest, preserving source order with logarithmic storage-type depth.
+slots) sweep. Completed slots remain inline. The macro constructs a balanced tree of references to the futures’ final inline
+slots once, preserving source order with logarithmic storage-type depth.
 There is no fixed task capacity or runtime allocator. Macros use `syn`/`quote` on
 the build host; generated execution code uses only `core`.
 
@@ -179,7 +179,7 @@ runtime-wide capacity.
 Validation runs one job at a time under the supplied descendant-memory guard.
 Use the same guard as the consuming Hibana project. Logs and source hashes stay
 in `validation/`; retain the guard output with them. Tests cover exact borrow/move diagnostics, normal async boundaries,
-allocation counting, cancellation, retained wakers, simultaneous polls of non-Send
+allocation counting, bounded-stack construction, cancellation, retained wakers, simultaneous polls of non-Send
 futures built on different threads, actual Endpoint communication across processes,
 Miri, 256 declarations without a recursion-limit override, and Cortex-M0+ linking.
 Lean and Z3 check scoped scheduler arithmetic in independent models; they do not

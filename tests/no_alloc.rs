@@ -3,7 +3,9 @@ use core::convert::Infallible;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use hibana_runtime::__private::Runtime;
+#[macro_use]
+#[path = "support/storage.rs"]
+mod storage;
 #[path = "support/driver.rs"]
 mod driver;
 use driver::TestDriver;
@@ -119,15 +121,11 @@ fn construction_registration_run_and_cancellation_allocate_nothing() {
             completed.set(completed.get() + 1);
             Ok::<_, Infallible>(())
         };
-        let executor = Runtime::<Infallible>::new()
-            .localside(first)
-            .localside(second);
+        let executor = runtime!(Infallible; first, second);
         let result = executor.run(TestDriver(Waker::noop(), || waits.set(waits.get() + 1)));
         assert_eq!(result, Ok(()));
 
-        let result = Runtime::new()
-            .localside(PendingDrop(&cancelled))
-            .localside(async { Err::<(), ()>(()) })
+        let result = runtime!(_; PendingDrop(&cancelled), async { Err::<(), ()>(()) })
             .run(TestDriver(Waker::noop(), || unreachable!()));
         assert_eq!(result, Err(()));
     });

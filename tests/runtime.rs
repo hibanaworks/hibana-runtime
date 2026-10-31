@@ -2,7 +2,9 @@ use core::convert::Infallible;
 use core::future::Future;
 use core::pin::{Pin, pin};
 use core::task::{Context, Poll, Waker};
-use hibana_runtime::__private::Runtime;
+#[macro_use]
+#[path = "support/storage.rs"]
+mod storage;
 #[path = "support/driver.rs"]
 mod driver;
 use driver::TestDriver;
@@ -66,11 +68,7 @@ fn scoped_non_send_futures_can_hold_borrows_across_suspension() {
         local.set(local.get() + 1);
         Ok::<_, Infallible>(())
     };
-    let mut executor = pin!(
-        Runtime::<Infallible>::new()
-            .localside(first)
-            .localside(second)
-    );
+    let mut executor = pin!(runtime!(Infallible; first, second));
     let (_, wake) = waker();
 
     assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
@@ -114,12 +112,7 @@ fn every_live_task_progresses_and_completed_tasks_are_not_repolled() {
         polls: &counts[2],
         finish_at: 2,
     };
-    let mut executor = pin!(
-        Runtime::<Infallible>::new()
-            .localside(first)
-            .localside(second)
-            .localside(third)
-    );
+    let mut executor = pin!(runtime!(Infallible; first, second, third));
     let (_, wake) = waker();
 
     assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
@@ -160,12 +153,7 @@ fn the_first_task_rotates_between_sweeps() {
         id: 2,
         order: &order,
     };
-    let mut executor = pin!(
-        Runtime::<Infallible>::new()
-            .localside(first)
-            .localside(second)
-            .localside(third)
-    );
+    let mut executor = pin!(runtime!(Infallible; first, second, third));
     let (_, wake) = waker();
 
     for _ in 0..3 {
@@ -189,7 +177,7 @@ impl Future for CaptureWaker<'_> {
 fn tasks_receive_the_current_parent_waker_without_a_stale_registration() {
     let captured = RefCell::new(None);
     let task = CaptureWaker(&captured);
-    let mut executor = pin!(Runtime::<Infallible>::new().localside(task));
+    let mut executor = pin!(runtime!(Infallible; task));
     let (first_count, first) = waker();
     let (second_count, second) = waker();
 
@@ -211,7 +199,7 @@ fn a_task_can_wake_the_driver_from_inside_poll() {
         YieldOnce(false).await;
         Ok::<_, Infallible>(())
     };
-    let mut executor = pin!(Runtime::<Infallible>::new().localside(task));
+    let mut executor = pin!(runtime!(Infallible; task));
     let (count, wake) = waker();
 
     assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
@@ -225,7 +213,7 @@ fn a_retained_waker_remains_usable_after_task_and_executor_cancellation() {
     let (count, wake) = waker();
     {
         let task = CaptureWaker(&captured);
-        let mut executor = pin!(Runtime::<Infallible>::new().localside(task));
+        let mut executor = pin!(runtime!(Infallible; task));
         assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
     }
 
@@ -271,7 +259,7 @@ fn cancellation_drops_a_non_unpin_future_at_its_polled_address() {
     };
     let (_, wake) = waker();
     {
-        let mut executor = pin!(Runtime::<Infallible>::new().localside(task));
+        let mut executor = pin!(runtime!(Infallible; task));
         assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
         assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
     }
@@ -393,11 +381,7 @@ fn success_releases_the_future_before_the_other_tasks_finish() {
         result: None,
     };
     {
-        let mut executor = pin!(
-            Runtime::<Failure>::new()
-                .localside(success)
-                .localside(pending)
-        );
+        let mut executor = pin!(runtime!(Failure; success, pending));
         let (_, wake) = waker();
         assert_eq!(poll(executor.as_mut(), &wake), Poll::Pending);
         assert_eq!(drops.each_ref().map(Cell::get), [1, 0]);
@@ -425,12 +409,7 @@ fn failure_cancels_all_pending_futures_before_returning() {
         result: None,
     };
     {
-        let mut executor = pin!(
-            Runtime::<Failure>::new()
-                .localside(first)
-                .localside(failed)
-                .localside(last)
-        );
+        let mut executor = pin!(runtime!(Failure; first, failed, last));
         let (_, wake) = waker();
         assert_eq!(poll(executor.as_mut(), &wake), Poll::Ready(Err(Failure)));
         // The completed executor is still alive: cancellation cannot be deferred
@@ -452,7 +431,7 @@ fn dropping_an_executor_cancels_even_unpolled_tasks_exactly_once() {
             result: None,
         };
         {
-            let _executor = Runtime::<Failure>::new().localside(task);
+            let _executor = runtime!(Failure; task);
         }
         assert_eq!(polls.get(), 0);
         assert_eq!(drops.get(), 1);
@@ -471,7 +450,7 @@ fn run_pins_owned_scoped_futures_and_releases_borrows_without_caller_pinning() {
     }
 
     let mut value = 0;
-    let runtime = Runtime::<Infallible>::new().localside(write(&mut value));
+    let runtime = runtime!(Infallible; write(&mut value));
     // Startup ownership can move through an ordinary function. Address
     // stability begins inside run, rather than at a caller-written pin site.
     let runtime = core::convert::identity(runtime);
@@ -490,20 +469,18 @@ fn runtimes_can_be_awaited_without_caller_pinning() {
     let value = Cell::new(0);
     let token = Arc::new(WakeToken::default());
     let wake = Waker::from(token.clone());
-    Runtime::<Infallible>::new()
-        .localside(async {
-            Runtime::<Infallible>::new()
-                .localside(async {
-                    YieldOnce(false).await;
-                    value.set(42);
-                    Ok::<_, Infallible>(())
-                })
-                .await
-        })
-        .run(TestDriver(&wake, || {
-            assert!(token.0.swap(false, Ordering::SeqCst))
-        }))
-        .unwrap();
+    runtime!(Infallible; async {
+        runtime!(Infallible; async {
+                YieldOnce(false).await;
+                value.set(42);
+                Ok::<_, Infallible>(())
+            })
+            .await
+    })
+    .run(TestDriver(&wake, || {
+        assert!(token.0.swap(false, Ordering::SeqCst))
+    }))
+    .unwrap();
     assert_eq!(value.get(), 42);
 }
 
@@ -529,7 +506,7 @@ fn run_works_with_a_driver_that_retains_a_wake_before_wait() {
         YieldOnce(false).await;
         Ok::<_, Infallible>(())
     };
-    let executor = Runtime::<Infallible>::new().localside(task);
+    let executor = runtime!(Infallible; task);
 
     assert_eq!(
         executor.run(TestDriver(&wake, || {
@@ -596,7 +573,7 @@ fn a_cross_thread_wake_drives_a_non_send_local_future() {
         local.set(local.get() + 1);
         Ok::<_, Infallible>(())
     };
-    let executor = Runtime::<Infallible>::new().localside(task);
+    let executor = runtime!(Infallible; task);
     let wake = Waker::from(Arc::new(Unpark(std::thread::current())));
 
     assert_eq!(executor.run(TestDriver(&wake, std::thread::park)), Ok(()));
@@ -607,11 +584,11 @@ fn a_cross_thread_wake_drives_a_non_send_local_future() {
 #[test]
 fn empty_executor_completes_without_waiting() {
     let (_, wake) = waker();
-    let mut executor = pin!(Runtime::<Infallible>::new());
+    let mut executor = pin!(runtime!(Infallible; ));
     assert_eq!(poll(executor.as_mut(), &wake), Poll::Ready(Ok(())));
     assert_eq!(poll(executor.as_mut(), &wake), Poll::Ready(Ok(())));
     assert_eq!(
-        Runtime::<Infallible>::new().run(TestDriver(&wake, || {
+        runtime!(Infallible; ).run(TestDriver(&wake, || {
             panic!("an empty executor must not wait")
         })),
         Ok(())

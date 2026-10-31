@@ -157,7 +157,33 @@ fn declaration(statement: &Stmt) -> bool {
         || parts(statement).is_some_and(|(attrs, _)| attrs.iter().any(is_marker))
 }
 
+fn storage(children: &[Tokens]) -> Tokens {
+    match children.len() {
+        0 => quote!(()),
+        1 => children[0].clone(),
+        count => {
+            let middle = count / 2;
+            let left = storage(&children[..middle]);
+            let right = storage(&children[middle..]);
+            quote!(::hibana_runtime::__private::Pair { left: #left, right: #right })
+        }
+    }
+}
+
 impl Lower {
+    fn placed(&mut self, attrs: &[Attribute], future: Tokens, placements: &mut Tokens) -> Tokens {
+        let name = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
+        self.next += 1;
+        placements.extend(quote!(
+            #(#attrs)* let #name = ::core::pin::pin!(::core::option::Option::Some(#future));
+        ));
+        quote!({ #(#attrs)* {
+            ::hibana_runtime::__private::Leaf {
+                future: ::core::option::Option::Some(::hibana_runtime::__private::placed(#name)),
+            }
+        }})
+    }
+
     fn attributes(&mut self, attrs: Vec<Attribute>) -> Vec<Attribute> {
         attrs
             .into_iter()
@@ -215,9 +241,10 @@ impl Lower {
         let output = format_ident!("__hibana_output{}", self.next, span = Span::mixed_site());
         self.next += 1;
         let mut slots = Tokens::new();
+        let mut placements = Tokens::new();
         let mut results = Tokens::new();
         let mut has_results = false;
-        let bindings: Vec<_> = remaining
+        let mut children: Vec<_> = remaining
             .into_iter()
             .map(|stmt| {
                 if let Stmt::Local(local) = stmt {
@@ -251,16 +278,12 @@ impl Lower {
                         future => quote!(#future),
                     };
                     let slot = format_ident!("__hibana_slot{}", self.next, span = Span::mixed_site());
-                    let pending = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
                     self.next += 1;
                     slots.extend(quote!(#(#attrs)* let mut #slot = ::core::option::Option::None;));
                     results.extend(quote!(#(#attrs)* let #pattern = #slot.expect("completed localside produced its result");));
-                    return quote!(
-                        #(#attrs)* let #pending = #future;
-                        #(#attrs)* let #name = #name.localside(
-                            ::hibana_runtime::__private::store_result(#pending, &mut #slot)
-                        );
-                    );
+                    return self.placed(&attrs, quote!(
+                        ::hibana_runtime::__private::store_result(#future, &mut #slot)
+                    ), &mut placements);
                 }
                 let (attrs, future) = parts(&stmt).expect("declaration expression");
                 let attrs = self.attributes(attrs);
@@ -269,53 +292,62 @@ impl Lower {
                     let capture = &child.capture;
                     let block = &child.block;
                     let error = &self.error;
-                    return quote!(#(#attrs)* let #name = #name.localside(
-                        #(#child_attrs)* ::hibana_runtime::__private::call_once(
-                            async #capture || -> ::core::result::Result<(), #error> #block
-                        )
-                    ););
+                    let future = quote!(#(#child_attrs)* ::hibana_runtime::__private::call_once(
+                        async #capture || -> ::core::result::Result<(), #error> #block
+                    ));
+                    return self.placed(&attrs, future, &mut placements);
                 }
-                let pending = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
-                self.next += 1;
-                quote!(
-                    #(#attrs)* let #pending = #future;
-                    #(#attrs)* let #name = #name.localside(#pending);
-                )
+                self.placed(&attrs, quote!(#future), &mut placements)
             })
             .collect();
         let error = self.error.clone();
-        let setup = quote!(
-            let #name = ::hibana_runtime::__private::Runtime::<#error>::new();
-            #(#bindings)*
-        );
         let tail: Expr = if has_results {
             let suffix = self.statements(suffix);
+            let rows = storage(&children);
             parse_quote!(::hibana_runtime::__private::call_once(async || -> ::core::result::Result<_, #error> {
                 #slots
-                #setup
-                #name.await?;
+                {
+                    #placements
+                    let #name = ::hibana_runtime::__private::Runtime::<#error, _>::new(#rows);
+                    #name.await?;
+                }
                 #results
                 #(#suffix)*
             }).await)
         } else if suffix.is_empty() {
-            parse_quote!({ #setup #name.await })
+            let rows = storage(&children);
+            parse_quote!({
+                #placements
+                ::hibana_runtime::__private::Runtime::<#error, _>::new(#rows).await
+            })
         } else {
             let suffix = Block {
                 brace_token: Default::default(),
                 stmts: self.statements(suffix),
             };
-            // Only an async body is a lifetime/completion boundary. The entire
-            // suffix moves into one parent future, so Rust's return/?/loop/label
-            // rules need no control-flow rewriting or synthetic exit enums.
+            // Build the complete balanced storage once. Inserting futures one
+            // by one would repeatedly move every earlier input on the stack.
+            // The suffix remains one async body, preserving Rust's exits and
+            // the children's completion boundary.
+            let parent = self.placed(
+                &[],
+                quote!(
+                    ::hibana_runtime::__private::store_result(
+                        ::hibana_runtime::__private::call_once(
+                            async || -> ::core::result::Result<_, #error> #suffix
+                        ),
+                        &mut #output,
+                    )
+                ),
+                &mut placements,
+            );
+            children.push(parent);
+            let rows = storage(&children);
             parse_quote!({
                 let mut #output = ::core::option::Option::None;
                 {
-                    #setup
-                    #name.localside(async {
-                        let value: ::core::result::Result<_, #error> = (async #suffix).await;
-                        #output = ::core::option::Option::Some(value?);
-                        ::core::result::Result::Ok::<(), #error>(())
-                    }).await?;
+                    #placements
+                    ::hibana_runtime::__private::Runtime::<#error, _>::new(#rows).await?;
                 }
                 ::core::result::Result::Ok::<_, #error>(
                     #output.expect("completed async body produced its value")
