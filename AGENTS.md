@@ -12,6 +12,14 @@ visible in the participant's localside body; do not hide protocol steps in
 helpers or generated workflow drivers. Codecs, buffers and actual I/O do not
 become another coordination specification.
 
+Consumers must be rewritten for this runtime, not mechanically translated from
+Tokio. Support direct participant declarations, ordinary borrowed and owned
+arguments, and each localside's complete operation flow. Do not require startup
+join trees, task/result tables, duplicate completion checks, application
+schedulers or conversion wrappers. Fix this runtime when direct localside code
+needs an adapter. I/O participants own their data and final I/O; the runtime
+owns polling, cancellation and waiting for children.
+
 Keep the execution core `no_std`, allocation-free and caller-stored. Host support
 uses the standard library and operating-system interfaces. Do not add Tokio or
 another async framework, executor, reactor or channel crate. Syntax parsing for
