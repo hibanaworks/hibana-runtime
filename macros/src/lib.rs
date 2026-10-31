@@ -255,7 +255,19 @@ impl Lower {
                 }
                 let (attrs, future) = parts(&stmt).expect("declaration expression");
                 let attrs = self.attributes(attrs);
-                quote!(#(#attrs)* let #name = #name.localside(#future);)
+                if matches!(future, Expr::Async(_)) {
+                    return quote!(#(#attrs)* let #name = #name.localside(#future););
+                }
+                let pending = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
+                self.next += 1;
+                let error = &self.error;
+                quote!(
+                    #(#attrs)* let #pending = #future;
+                    #(#attrs)* let #name = #name.localside(async {
+                        #pending.await?;
+                        ::core::result::Result::Ok::<(), #error>(())
+                    });
+                )
             })
             .collect();
         let error = self.error.clone();

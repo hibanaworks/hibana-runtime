@@ -679,6 +679,45 @@ fn nested_result_bindings_infer_an_error_with_multiple_conversions() {
 }
 
 #[test]
+fn named_localsides_convert_their_errors_and_cancel_a_pending_sibling() {
+    #[derive(Debug, PartialEq)]
+    struct Error(u16);
+    impl From<u8> for Error {
+        fn from(value: u8) -> Self {
+            Self(value.into())
+        }
+    }
+    impl From<u16> for Error {
+        fn from(value: u16) -> Self {
+            Self(value)
+        }
+    }
+    async fn fail() -> Result<(), u8> {
+        yield_once().await;
+        Err(7)
+    }
+    async fn waiting(drops: &Cell<u32>) -> Result<(), u16> {
+        let _owned = Never(drops);
+        core::future::pending().await
+    }
+    #[localside]
+    async fn program(drops: &Cell<u32>, continued: &Cell<bool>) -> Result<(), Error> {
+        #[localside]
+        fail();
+        #[localside]
+        waiting(drops);
+        core::future::pending::<()>().await;
+        continued.set(true);
+        Ok(())
+    }
+    let drops = Cell::new(0);
+    let continued = Cell::new(false);
+    assert_eq!(run(program(&drops, &continued)), Err(Error(7)));
+    assert_eq!(drops.get(), 1);
+    assert!(!continued.get());
+}
+
+#[test]
 fn a_bound_result_can_borrow_a_callers_view_after_the_scope_returns() {
     struct View(u32);
     impl View {
