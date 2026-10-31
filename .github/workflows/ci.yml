@@ -1,10 +1,15 @@
 name: Runtime checks
-on: [push, pull_request]
+on: workflow_dispatch
 jobs:
   runtime:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: hibanaworks/hibana
+          ref: e139912e07fe4cd5ba599dd3749d6e03ce9d1ee1
+          path: validation-core
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -19,7 +24,9 @@ jobs:
           sudo apt-get install -y z3 elan
           elan toolchain install leanprover/lean4:v4.34.1
       - name: Validate
-        run: python3 tools/validate.py
+        env:
+          HIBANA_RESOURCE_GUARD: ${{ github.workspace }}/validation-core/.github/scripts/lib/resource_guard.sh
+        run: bash tools/check.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

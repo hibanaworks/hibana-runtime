@@ -166,3 +166,75 @@ fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
     assert_eq!(completed.get(), 2);
     assert_eq!(cancelled.get(), 1);
 }
+
+#[test]
+fn racing_releases_the_pending_future_before_the_completed_race_is_dropped() {
+    let cancelled = Cell::new(0);
+    assert_eq!(
+        allocations_during(|| {
+            let result = hibana_runtime::race(PendingDrop(&cancelled), async {
+                hibana_runtime::yield_now().await;
+                Ok::<(), ()>(())
+            });
+            let mut result = core::pin::pin!(result);
+            let mut context = Context::from_waker(Waker::noop());
+            assert_eq!(result.as_mut().poll(&mut context), Poll::Pending);
+            assert_eq!(cancelled.get(), 0);
+            assert_eq!(result.as_mut().poll(&mut context), Poll::Ready(Ok(())));
+            assert_eq!(cancelled.get(), 1);
+        }),
+        0
+    );
+}
+
+#[test]
+fn concurrent_result_bindings_allocate_nothing() {
+    #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
+    async fn program() -> Result<(u8, u16), ()> {
+        #[localside]
+        let first = async {
+            hibana_runtime::yield_now().await;
+            Ok::<_, ()>(7u8)
+        };
+        #[localside]
+        let second = async {
+            hibana_runtime::yield_now().await;
+            Ok::<_, ()>(8u16)
+        };
+        Ok((first, second))
+    }
+    assert_eq!(allocations_during(|| assert_eq!(program(), Ok((7, 8)))), 0);
+}
+
+#[cfg(feature = "host")]
+#[test]
+fn host_entry_waking_and_cancellation_allocate_nothing() {
+    #[hibana_runtime::main]
+    async fn program(completed: &Cell<u32>, cancelled: &Cell<usize>) -> Result<(), ()> {
+        async {
+            async {
+                hibana_runtime::yield_now().await;
+                completed.set(completed.get() + 1);
+            };
+            async {
+                hibana_runtime::yield_now().await;
+                completed.set(completed.get() + 1);
+            };
+            Ok(())
+        }
+        .await?;
+        #[localside]
+        PendingDrop(cancelled);
+        hibana_runtime::yield_now().await;
+        Err(())
+    }
+
+    let completed = Cell::new(0);
+    let cancelled = Cell::new(0);
+    assert_eq!(
+        allocations_during(|| assert_eq!(program(&completed, &cancelled), Err(()))),
+        0
+    );
+    assert_eq!(completed.get(), 2);
+    assert_eq!(cancelled.get(), 1);
+}

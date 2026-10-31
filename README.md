@@ -5,6 +5,24 @@ Their image supplies execution. No public task builder, `spawn`, `join!`,
 `select!`, completion handles, or user pinning.
 Rust 2024, unconditional `no_std`, no runtime allocation, caller-owned storage.
 
+The execution core has no runtime dependencies. The `host` feature supplies a
+macOS event queue using the operating system directly. It adds no async framework,
+allocator, shared resource owner or protocol cursor. Host descriptor readiness
+and timers are not implemented by this driver yet.
+
+```rust
+#[hibana_runtime::main]
+async fn main() -> Result<(), std::convert::Infallible> {
+    async { /* first localside */ };
+    async { /* independent localside */ };
+    Ok(())
+}
+```
+
+Enable `host` for an argument-free entry point. Other platforms provide their
+own `Driver` through `#[hibana_runtime::main(driver)]`. Both use the same scoped
+scheduler. `yield_now().await` lets another localside run during a long computation.
+
 ```rust
 #[hibana_runtime::main(events)]
 async fn image(
@@ -43,6 +61,23 @@ ownership and lazy parameter destructuring retain async-function behavior.
 
 Children may borrow caller-owned data and need not be `Send`, `'static`,
 or `Unpin`.
+
+Bind results when subsequent code needs the values. A contiguous group of
+bindings runs concurrently and finishes before the following statement:
+
+```rust
+#[localside]
+let first = first_endpoint.recv::<First>();
+#[localside]
+let second = second_endpoint.recv::<Second>();
+use_results(first, second);
+```
+
+The bindings contain the successful values, with errors returned from the
+enclosing async body. The runtime retains intermediate results; the application
+does not keep completion flags or result mailboxes. To wait for either of two
+futures, `race(left, right).await` drops the unfinished future when one completes.
+Each future retains its normal cancellation contract.
 
 Ordinary `{}` blocks do not introduce waiting, joining, or async destruction.
 Registrations belong directly to an async body. For a nested phase, an ordinary
@@ -130,7 +165,7 @@ sequential Rust function.
 ```sh
 cargo +stable run --example localsides
 cargo +stable run --example images
-python3 tools/validate.py
+HIBANA_RESOURCE_GUARD=/path/to/shared/resource-guard bash tools/check.sh
 ```
 
 The second example uses Unix datagrams on Unix hosts. The OS starts two threads
@@ -141,9 +176,9 @@ not become a dependency or heap requirement of the no_std runtime. The carrier's
 bounds come from this finite example's four frames and u32 payloads, not a
 runtime-wide capacity.
 
-Validation runs one job at a time under the shared [3 GB descendant RSS
-guard](tools/resource_guard.py). Logs, memory peaks, and source hashes stay in
-`validation/`. Tests cover exact borrow/move diagnostics, normal async boundaries,
+Validation runs one job at a time under the supplied descendant-memory guard.
+Use the same guard as the consuming Hibana project. Logs and source hashes stay
+in `validation/`; retain the guard output with them. Tests cover exact borrow/move diagnostics, normal async boundaries,
 allocation counting, cancellation, retained wakers, simultaneous polls of non-Send
 futures built on different threads, actual Endpoint communication across processes,
 Miri, 256 declarations without a recursion-limit override, and Cortex-M0+ linking.
@@ -152,33 +187,6 @@ prove macro refinement, protocol correctness, or arbitrary computation terminati
 
 Prerequisites: updated stable Rust with rustfmt/clippy and `thumbv6m-none-eabi`,
 Lean `v4.34.1`, and Z3. Miri alone uses `nightly-2026-10-12` with `miri`/`rust-src`.
-
-## Development-core boundary
-
-Ordinary Endpoint examples use published Hibana 0.9.9. Owned delegation requires
-the development core. To check the [real owned-view fixture](fixtures/owned_views.rs)
-without editing that core checkout:
-
-```sh
-HIBANA_DELEGATION_CORE=/absolute/path/to/core python3 tools/validate.py
-```
-
-The fixture checks two independent views, A-to-B-to-A ownership transfer across
-separate actor runtimes, and post-return continuation, on host and under Miri.
-Native integration fixtures additionally exercise actual process-to-process
-owned transfer, an unread frame surviving the former holder's process exit,
-and route/resolver/par/roll composition with post-return continuation. These
-fixtures use hibana-runtime for localside scheduling and the core's existing
-Tokio-backed native test carrier for OS readiness and watchdog timers. Tokio is
-not a dependency of the runtime. The finite host image example uses no Tokio.
-
-Validation records the captured core revision and dirty-source fingerprints.
-Only test setup changes in its isolated copy: integration modules are added and
-the existing native mailbox helper becomes visible to sibling tests. Production
-code and the public owned-projection guard stay unchanged. These internal tests
-do not qualify public delegation, arbitrary remote deployments, or a hibana-quic
-rewrite. The standalone two-process executable tests ordinary Endpoint traffic;
-the separate native fixtures supply the owned-transfer evidence.
 
 The [Pico link probe](examples/pico.rs) retains independent core0/core1 entries
 with local inferred future storage. It is a size/link probe with no boot block,

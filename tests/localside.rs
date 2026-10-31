@@ -611,3 +611,63 @@ fn argument_destructuring_and_receiver_ownership_match_async_functions() {
     drop(future);
     assert_eq!(drops.get(), 1);
 }
+
+#[test]
+fn result_bindings_run_concurrently_and_release_borrows_before_the_continuation() {
+    #[localside]
+    async fn program(left: &mut u32, right: &mut u32) -> Outcome<(u32, u32)> {
+        let result = async {
+            #[localside]
+            let a = async {
+                yield_once().await;
+                *left += 1;
+                Ok::<_, &'static str>(*left)
+            };
+            #[localside]
+            let b = async {
+                yield_once().await;
+                *right += 2;
+                Ok::<_, &'static str>(*right)
+            };
+            Ok((a, b))
+        }
+        .await?;
+        *left += 10;
+        *right += 20;
+        Ok(result)
+    }
+    let mut left = 0;
+    let mut right = 0;
+    assert_eq!(run(program(&mut left, &mut right)), Ok((1, 2)));
+    assert_eq!((left, right), (11, 22));
+}
+
+#[test]
+fn failed_result_binding_cancels_its_pending_sibling_without_running_the_continuation() {
+    struct OnDrop<'a>(&'a Cell<u32>);
+    impl Drop for OnDrop<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    #[localside]
+    async fn program(dropped: &Cell<u32>) -> Outcome {
+        let probe = OnDrop(dropped);
+        #[localside]
+        let a = async move {
+            let _probe = probe;
+            core::future::pending::<()>().await;
+            Ok::<_, &'static str>(())
+        };
+        #[localside]
+        let b = async {
+            yield_once().await;
+            Err::<(), _>("failed")
+        };
+        let _ = (a, b);
+        panic!("failed localsides must not run the continuation")
+    }
+    let dropped = Cell::new(0);
+    assert_eq!(run(program(&dropped)), Err("failed"));
+    assert_eq!(dropped.get(), 1);
+}

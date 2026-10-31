@@ -1,0 +1,28 @@
+# Execution rules
+
+Hibana's global and kernel own protocol order, branch knowledge and Endpoint
+ownership. This crate owns only future storage, pinning, polling and cancellation.
+Do not interpret the global again or add an owner table or protocol cursor here.
+
+Keep the execution core `no_std`, allocation-free and caller-stored. Host support
+uses the standard library and operating-system interfaces. Do not add Tokio or
+another async framework, executor, reactor or channel crate. Syntax parsing for
+procedural macros stays on the build host, outside generated execution code.
+
+Do not introduce application progress flags, permission wrappers, completion
+mailboxes or localside workarounds for legal globals. Return values are data;
+the scheduler must manage their lifetimes without requiring application flags.
+Cancellation drops unfinished futures in place and never restores transferred
+Endpoint ownership or rolls back accepted I/O. Retained Wakers must remain valid
+after their scoped futures and driver have gone away.
+
+Use current stable Rust and retain `forbid(long_running_const_eval)`. Verify
+borrow and move errors with actual compiler checks. Use Miri for pinning and
+cancellation, real host tests for OS wake delivery, and no-allocation tests for
+the execution path. Scheduler arithmetic proofs do not prove macro refinement.
+
+Run `tools/check.sh` with the shared descendant-memory guard. One heavy workload
+at a time; retain source hashes and failed verification. Do not use Docker or a
+VM, raise the memory limit, or weaken a test to obtain a passing result.
+Publish verified source with `[skip ci]`; run the gates locally while Actions
+budget is unavailable. Do not use development subagents.

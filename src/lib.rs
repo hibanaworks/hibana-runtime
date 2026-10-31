@@ -60,15 +60,71 @@
 //! ```
 #![no_std]
 
+#[cfg(feature = "host")]
+extern crate std;
+
 mod executor;
+#[cfg(feature = "host")]
+mod host;
 
 pub use executor::Driver;
 pub use hibana_runtime_macros::{localside, main};
+
+/// Give other localsides a turn before continuing a computation.
+///
+/// This returns `Pending` once and requests another poll. It neither advances
+/// an endpoint nor cancels an operation.
+pub async fn yield_now() {
+    let mut yielded = false;
+    core::future::poll_fn(|cx| {
+        if yielded {
+            core::task::Poll::Ready(())
+        } else {
+            yielded = true;
+            cx.waker().wake_by_ref();
+            core::task::Poll::Pending
+        }
+    })
+    .await;
+}
+
+/// Complete when either future completes, dropping the other in place.
+///
+/// Poll order alternates after a pending poll. Cancellation follows each
+/// future's own contract; accepted communication is never rolled back.
+pub async fn race<T>(
+    left: impl core::future::Future<Output = T>,
+    right: impl core::future::Future<Output = T>,
+) -> T {
+    let mut left = core::pin::pin!(left);
+    let mut right = core::pin::pin!(right);
+    let mut left_first = true;
+    core::future::poll_fn(|cx| {
+        let first = if left_first {
+            left.as_mut().poll(cx)
+        } else {
+            right.as_mut().poll(cx)
+        };
+        left_first = !left_first;
+        match first {
+            core::task::Poll::Ready(value) => core::task::Poll::Ready(value),
+            core::task::Poll::Pending if left_first => left.as_mut().poll(cx),
+            core::task::Poll::Pending => right.as_mut().poll(cx),
+        }
+    })
+    .await
+}
 
 /// Implementation details used by generated code, not an application API.
 #[doc(hidden)]
 pub mod __private {
     pub use crate::executor::Runtime;
+
+    /// Host readiness integration for the entry-point attribute.
+    #[cfg(feature = "host")]
+    pub fn host_block_on<F: core::future::Future>(future: F) -> F::Output {
+        crate::host::block_on(future)
+    }
 
     /// Infer the error type even when the function uses a Result alias.
     pub trait Outcome {

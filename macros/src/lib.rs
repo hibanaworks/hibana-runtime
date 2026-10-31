@@ -19,14 +19,24 @@ pub fn localside(args: TokenStream, input: TokenStream) -> TokenStream {
     expand(parse_macro_input!(input as ItemFn), None)
 }
 
-/// A platform entry point, using that image's wake/wait driver.
+/// A platform entry point. Supply a driver, or enable `host` to use the macOS
+/// wake/wait driver without an argument.
 #[proc_macro_attribute]
 pub fn main(args: TokenStream, input: TokenStream) -> TokenStream {
-    let driver = parse_macro_input!(args as Expr);
-    expand(parse_macro_input!(input as ItemFn), Some(driver))
+    let entry = if args.is_empty() {
+        Entry::Host
+    } else {
+        Entry::Driver(parse_macro_input!(args as Expr))
+    };
+    expand(parse_macro_input!(input as ItemFn), Some(entry))
 }
 
-fn expand(mut function: ItemFn, driver: Option<Expr>) -> TokenStream {
+enum Entry {
+    Driver(Expr),
+    Host,
+}
+
+fn expand(mut function: ItemFn, entry: Option<Entry>) -> TokenStream {
     if function.sig.asyncness.is_none() {
         return syn::Error::new_spanned(&function.sig, "a localside must be async")
             .into_compile_error()
@@ -45,12 +55,17 @@ fn expand(mut function: ItemFn, driver: Option<Expr>) -> TokenStream {
     if !lower.diagnostics.is_empty() {
         return lower.diagnostics.into();
     }
-    if let Some(driver) = driver {
+    if let Some(entry) = entry {
         function.sig.asyncness = None;
         let body = function.block;
-        function.block = Box::new(parse_quote!({
-            ::hibana_runtime::__private::block_on(async move #body, #driver)
-        }));
+        function.block = Box::new(match entry {
+            Entry::Driver(driver) => parse_quote!({
+                ::hibana_runtime::__private::block_on(async move #body, #driver)
+            }),
+            Entry::Host => parse_quote!({
+                ::hibana_runtime::__private::host_block_on(async move #body)
+            }),
+        });
     } else {
         // Ordinary Rust 2024 function signatures support lifetime elision in
         // paths such as Endpoint<CLIENT>. Return-position impl Future captures
@@ -138,10 +153,29 @@ fn parts(statement: &Stmt) -> Option<(Vec<Attribute>, Expr)> {
 
 fn declaration(statement: &Stmt) -> bool {
     matches!(statement, Stmt::Expr(Expr::Async(_), Some(_)))
+        || matches!(statement, Stmt::Local(local) if local.attrs.iter().any(is_marker))
         || parts(statement).is_some_and(|(attrs, _)| attrs.iter().any(is_marker))
 }
 
 impl Lower {
+    fn attributes(&mut self, attrs: Vec<Attribute>) -> Vec<Attribute> {
+        attrs
+            .into_iter()
+            .filter(|attr| {
+                if !is_marker(attr) {
+                    return true;
+                }
+                if !matches!(attr.meta, syn::Meta::Path(_)) {
+                    self.diagnostics.extend(
+                        syn::Error::new_spanned(attr, "a localside declaration takes no arguments")
+                            .into_compile_error(),
+                    );
+                }
+                false
+            })
+            .collect()
+    }
+
     fn body(&mut self, block: &mut Block) {
         for statement in &mut block.stmts {
             if let Stmt::Expr(Expr::Async(child), Some(_)) = statement {
@@ -180,28 +214,47 @@ impl Lower {
         let name = format_ident!("__hibana_tasks{}", self.next, span = Span::mixed_site());
         let output = format_ident!("__hibana_output{}", self.next, span = Span::mixed_site());
         self.next += 1;
+        let mut slots = Tokens::new();
+        let mut results = Tokens::new();
+        let mut has_results = false;
         let bindings: Vec<_> = remaining
             .into_iter()
             .map(|stmt| {
+                if let Stmt::Local(local) = stmt {
+                    has_results = true;
+                    let Some(init) = local.init else {
+                        self.diagnostics.extend(syn::Error::new_spanned(
+                            local.pat,
+                            "a localside binding requires a future",
+                        ).into_compile_error());
+                        return Tokens::new();
+                    };
+                    if init.diverge.is_some() {
+                        self.diagnostics.extend(syn::Error::new_spanned(
+                            init.expr,
+                            "a localside result uses an irrefutable binding",
+                        ).into_compile_error());
+                        return Tokens::new();
+                    }
+                    let attrs = self.attributes(local.attrs);
+                    let pattern = local.pat;
+                    let future = init.expr;
+                    let slot = format_ident!("__hibana_slot{}", self.next, span = Span::mixed_site());
+                    let pending = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
+                    self.next += 1;
+                    let error = &self.error;
+                    slots.extend(quote!(#(#attrs)* let mut #slot = ::core::option::Option::None;));
+                    results.extend(quote!(#(#attrs)* let #pattern = #slot.expect("completed localside produced its result");));
+                    return quote!(
+                        #(#attrs)* let #pending = #future;
+                        #(#attrs)* let #name = #name.localside(async {
+                            #slot = ::core::option::Option::Some(#pending.await?);
+                            ::core::result::Result::Ok::<(), #error>(())
+                        });
+                    );
+                }
                 let (attrs, future) = parts(&stmt).expect("declaration expression");
-                let attrs: Vec<_> = attrs
-                    .into_iter()
-                    .filter(|attr| {
-                        if !is_marker(attr) {
-                            return true;
-                        }
-                        if !matches!(attr.meta, syn::Meta::Path(_)) {
-                            self.diagnostics.extend(
-                                syn::Error::new_spanned(
-                                    attr,
-                                    "a localside declaration takes no arguments",
-                                )
-                                .into_compile_error(),
-                            );
-                        }
-                        false
-                    })
-                    .collect();
+                let attrs = self.attributes(attrs);
                 quote!(#(#attrs)* let #name = #name.localside(#future);)
             })
             .collect();
@@ -210,7 +263,16 @@ impl Lower {
             let #name = ::hibana_runtime::__private::Runtime::<#error>::new();
             #(#bindings)*
         );
-        let tail: Expr = if suffix.is_empty() {
+        let tail: Expr = if has_results {
+            let suffix = self.statements(suffix);
+            parse_quote!({
+                #slots
+                #setup
+                #name.await?;
+                #results
+                #(#suffix)*
+            })
+        } else if suffix.is_empty() {
             parse_quote!({ #setup #name.await })
         } else {
             let suffix = Block {
