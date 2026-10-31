@@ -643,6 +643,63 @@ fn result_bindings_run_concurrently_and_release_borrows_before_the_continuation(
 }
 
 #[test]
+fn nested_result_bindings_infer_an_error_with_multiple_conversions() {
+    #[derive(Debug, PartialEq)]
+    struct Error;
+    impl From<u8> for Error {
+        fn from(_: u8) -> Self {
+            Self
+        }
+    }
+    impl From<u16> for Error {
+        fn from(_: u16) -> Self {
+            Self
+        }
+    }
+
+    #[localside]
+    async fn program() -> Result<u32, Error> {
+        let (a, b) = async {
+            #[localside]
+            let a = async {
+                hibana_runtime::yield_now().await;
+                Ok::<_, Error>(7u32)
+            };
+            #[localside]
+            let b = async {
+                hibana_runtime::yield_now().await;
+                Ok::<_, Error>(8u32)
+            };
+            Ok((a, b))
+        }
+        .await?;
+        Ok(a + b)
+    }
+    assert_eq!(run(program()), Ok(15));
+}
+
+#[test]
+fn a_bound_result_can_borrow_a_callers_view_after_the_scope_returns() {
+    struct View(u32);
+    impl View {
+        async fn borrow_value(&mut self) -> Outcome<&mut u32> {
+            yield_once().await;
+            Ok(&mut self.0)
+        }
+    }
+    #[localside]
+    async fn borrow(view: &mut View) -> Outcome<&mut u32> {
+        #[localside]
+        let value = view.borrow_value();
+        Ok(value)
+    }
+    let mut view = View(7);
+    let value = run(borrow(&mut view)).unwrap();
+    *value += 1;
+    assert_eq!(view.0, 8);
+}
+
+#[test]
 fn failed_result_binding_cancels_its_pending_sibling_without_running_the_continuation() {
     struct OnDrop<'a>(&'a Cell<u32>);
     impl Drop for OnDrop<'_> {

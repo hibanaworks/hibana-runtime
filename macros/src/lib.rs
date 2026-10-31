@@ -265,13 +265,13 @@ impl Lower {
         );
         let tail: Expr = if has_results {
             let suffix = self.statements(suffix);
-            parse_quote!({
+            parse_quote!(::hibana_runtime::__private::call_once(async || -> ::core::result::Result<_, #error> {
                 #slots
                 #setup
                 #name.await?;
                 #results
                 #(#suffix)*
-            })
+            }).await)
         } else if suffix.is_empty() {
             parse_quote!({ #setup #name.await })
         } else {

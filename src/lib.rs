@@ -120,6 +120,12 @@ pub async fn race<T>(
 pub mod __private {
     pub use crate::executor::Runtime;
 
+    /// Consume an async closure so its returned future owns its captures.
+    #[inline]
+    pub fn call_once<T>(body: impl FnOnce() -> T) -> T {
+        body()
+    }
+
     /// Host readiness integration for the entry-point attribute.
     #[cfg(feature = "host")]
     pub fn host_block_on<F: core::future::Future>(future: F) -> F::Output {
