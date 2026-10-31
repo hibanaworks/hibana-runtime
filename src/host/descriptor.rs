@@ -39,6 +39,63 @@ enum Kind {
     File,
 }
 
+/// An owned wake direction for an external producer.
+///
+/// Enqueue the producer's data before calling [`notify`](Self::notify). Wakes
+/// may coalesce; the receiving I/O owner must check its data before waiting.
+/// Clones own separate OS descriptors and contain no scoped Rust pointers.
+pub struct Notification(OwnedFd);
+
+/// Open a notification direction and its asynchronous reader.
+///
+/// The reader receives bytes while producers are alive, and EOF after the last
+/// producer is dropped and queued bytes are read. The bytes carry no payload or
+/// count: read readiness means the I/O owner should check its external data.
+pub fn notification() -> io::Result<(Notification, Io)> {
+    let (reader, writer) = std::os::unix::net::UnixStream::pair()?;
+    let writer = Io::new(writer.into())?;
+    Ok((Notification(writer.into()), Io::new(reader.into())?))
+}
+
+impl Notification {
+    /// Duplicate the wake descriptor for another producer.
+    pub fn try_clone(&self) -> io::Result<Self> {
+        Ok(Self(self.0.try_clone()?))
+    }
+
+    /// Make the reader ready without waiting for it or allocating Rust memory.
+    /// A full socket already holds a wake, so additional wakes coalesce.
+    /// A closed reader returns an I/O error without raising SIGPIPE.
+    pub fn notify(&self) -> io::Result<()> {
+        let byte = [1u8];
+        loop {
+            // SAFETY: the socket is nonblocking and the complete one-byte
+            // buffer remains valid for the call. NOSIGNAL converts a closed
+            // reader into an error. This private descriptor retains its mode.
+            let written = unsafe {
+                send(
+                    self.0.as_raw_fd(),
+                    byte.as_ptr().cast(),
+                    byte.len(),
+                    MSG_NOSIGNAL,
+                )
+            };
+            if written == 1 {
+                return Ok(());
+            }
+            if written == 0 {
+                return Err(io::ErrorKind::WriteZero.into());
+            }
+            let error = io::Error::last_os_error();
+            match error.kind() {
+                io::ErrorKind::Interrupted => continue,
+                io::ErrorKind::WouldBlock => return Ok(()),
+                _ => return Err(error),
+            }
+        }
+    }
+}
+
 /// One nonblocking host descriptor, owned by its I/O participant.
 ///
 /// Reads and writes borrow this handle exclusively. For independent directions,

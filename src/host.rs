@@ -19,7 +19,7 @@ use std::{
 };
 
 mod descriptor;
-pub use descriptor::Io;
+pub use descriptor::{Io, Notification, notification};
 mod process;
 pub use process::Process;
 

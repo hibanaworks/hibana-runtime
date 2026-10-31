@@ -344,6 +344,29 @@ fn waiting_for_an_owned_child_allocates_nothing() {
     assert_eq!(allocations_during(|| run(&mut child).unwrap()), 0);
 }
 
+#[cfg(feature = "host")]
+#[test]
+fn external_notification_construction_cloning_and_waiting_allocate_nothing() {
+    #[hibana_runtime::main]
+    async fn run() -> std::io::Result<()> {
+        let (notify, mut input) = hibana_runtime::host::notification()?;
+        let duplicate = notify.try_clone()?;
+        async {
+            let mut bytes = [0; 8];
+            assert_eq!(input.read(&mut bytes).await?, 1);
+            assert_eq!(input.read(&mut bytes).await?, 0);
+        };
+        async move {
+            hibana_runtime::yield_now().await;
+            duplicate.notify()?;
+            drop(duplicate);
+            drop(notify);
+        };
+        Ok(())
+    }
+    assert_eq!(allocations_during(|| run().unwrap()), 0);
+}
+
 #[test]
 fn array_declarations_use_caller_storage_without_allocation() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]

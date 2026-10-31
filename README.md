@@ -79,6 +79,13 @@ point; another driver returns an error. Rust heap allocation is unnecessary for
 these operations, although each retained Waker and wait registration owns an OS
 descriptor. Application buffers and decoding remain with their I/O owner.
 
+External callbacks can enqueue their data and call `Notification::notify`.
+`host::notification()` returns the owned notification handle and an `Io` reader.
+Wakes can coalesce: the I/O participant drains its data before waiting on that
+reader. Clones own OS descriptors, so callbacks retain no address into a scoped
+future and do not need to keep its first Rust waker. Notification never waits
+for the reader, and EOF follows the last producer after queued wakes are read.
+
 `host::Process::spawn` starts an OS command with its configured environment and
 stdio. Give its piped stdin and stdout to I/O owners with `process.io()`, then
 await `process.wait()` alongside them. Cancelling that wait removes its event

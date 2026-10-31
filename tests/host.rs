@@ -1,7 +1,7 @@
 #![cfg(feature = "host")]
 
 use core::{cell::Cell, convert::Infallible, future::pending};
-use hibana_runtime::host::{Io, deadline, sleep};
+use hibana_runtime::host::{Io, deadline, notification, sleep};
 use std::{io, os::unix::net::UnixStream, time::Duration};
 
 #[test]
@@ -210,6 +210,101 @@ fn closed_peer_returns_broken_pipe_and_duplicate_handles_keep_their_own_lifetime
     let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);
     run(Io::new(writer.into()).unwrap()).unwrap();
+    let (notify, reader) = notification().unwrap();
+    let duplicate = notify.try_clone().unwrap();
+    drop(notify);
+    drop(reader);
+    assert_eq!(
+        duplicate.notify().unwrap_err().kind(),
+        io::ErrorKind::BrokenPipe
+    );
+}
+
+#[hibana_runtime::main]
+#[test]
+async fn external_notifications_wake_pending_reads_and_close_after_the_last_producer()
+-> io::Result<()> {
+    let (notify, mut input) = notification()?;
+    let other = notify.try_clone()?;
+    let producer = std::thread::spawn(move || -> io::Result<()> {
+        std::thread::sleep(Duration::from_millis(10));
+        other.notify()
+    });
+    let mut bytes = [0; 64];
+    hibana_runtime::race(
+        async {
+            assert!(input.read(&mut bytes).await? > 0);
+            Ok::<(), io::Error>(())
+        },
+        deadline(Duration::from_secs(2)),
+    )
+    .await?;
+    producer.join().unwrap()?;
+    notify.notify()?;
+    drop(notify);
+    assert!(input.read(&mut bytes).await? > 0);
+    assert_eq!(input.read(&mut bytes).await?, 0);
+    Ok(())
+}
+
+#[hibana_runtime::main]
+#[test]
+async fn queued_notifications_coalesce_without_blocking_the_producer() -> io::Result<()> {
+    let (notify, mut input) = notification()?;
+    let (finished, receive) = std::sync::mpsc::channel();
+    let producer = std::thread::spawn(move || {
+        let result = (|| {
+            for _ in 0..100_000 {
+                notify.notify()?;
+            }
+            Ok::<(), io::Error>(())
+        })();
+        drop(notify);
+        let _ = finished.send(result);
+    });
+    // A full wake socket must not block the producer. Bound a failing test as
+    // well: dropping the reader on timeout releases any stuck producer.
+    receive
+        .recv_timeout(Duration::from_secs(2))
+        .expect("notification blocked")?;
+    producer.join().unwrap();
+    let mut bytes = [0; 4096];
+    let mut observed = 0;
+    loop {
+        let read = input.read(&mut bytes).await?;
+        if read == 0 {
+            break;
+        }
+        observed += read;
+    }
+    assert!(observed > 0 && observed <= 100_000);
+    Ok(())
+}
+
+#[hibana_runtime::main]
+#[test]
+async fn each_external_producer_keeps_its_data_visible_until_notification_eof() -> io::Result<()> {
+    let (notify, mut input) = notification()?;
+    let (send, receive) = std::sync::mpsc::channel();
+    let producers = [0, 1, 2, 3].map(|value| {
+        let notify = notify.try_clone().unwrap();
+        let send = send.clone();
+        std::thread::spawn(move || -> io::Result<()> {
+            send.send(value).unwrap();
+            notify.notify()
+        })
+    });
+    drop(send);
+    drop(notify);
+    let mut bytes = [0; 64];
+    while input.read(&mut bytes).await? > 0 {}
+    for producer in producers {
+        producer.join().unwrap()?;
+    }
+    let mut values: Vec<_> = receive.try_iter().collect();
+    values.sort_unstable();
+    assert_eq!(values, [0, 1, 2, 3]);
+    Ok(())
 }
 
 #[test]
