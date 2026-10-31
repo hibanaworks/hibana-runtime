@@ -238,11 +238,21 @@ impl Lower {
                     }
                     let attrs = self.attributes(local.attrs);
                     let pattern = local.pat;
-                    let future = init.expr;
+                    let error = &self.error;
+                    let future = match init.expr.as_ref() {
+                        Expr::Async(body) => {
+                            let attrs = &body.attrs;
+                            let capture = &body.capture;
+                            let block = &body.block;
+                            quote!(#(#attrs)* ::hibana_runtime::__private::call_once(
+                                async #capture || -> ::core::result::Result<_, #error> #block
+                            ))
+                        }
+                        future => quote!(#future),
+                    };
                     let slot = format_ident!("__hibana_slot{}", self.next, span = Span::mixed_site());
                     let pending = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
                     self.next += 1;
-                    let error = &self.error;
                     slots.extend(quote!(#(#attrs)* let mut #slot = ::core::option::Option::None;));
                     results.extend(quote!(#(#attrs)* let #pattern = #slot.expect("completed localside produced its result");));
                     return quote!(

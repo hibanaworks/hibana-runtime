@@ -663,12 +663,12 @@ fn nested_result_bindings_infer_an_error_with_multiple_conversions() {
             #[localside]
             let a = async {
                 hibana_runtime::yield_now().await;
-                Ok::<_, Error>(7u32)
+                Ok(7u32)
             };
             #[localside]
             let b = async {
                 hibana_runtime::yield_now().await;
-                Ok::<_, Error>(8u32)
+                Ok(8u32)
             };
             Ok((a, b))
         }
@@ -732,10 +732,19 @@ fn a_bound_result_can_borrow_a_callers_view_after_the_scope_returns() {
         let value = view.borrow_value();
         Ok(value)
     }
+    #[localside]
+    async fn borrow_inline(view: &mut View) -> Outcome<&mut u32> {
+        #[localside]
+        let value = async { view.borrow_value().await };
+        Ok(value)
+    }
     let mut view = View(7);
     let value = run(borrow(&mut view)).unwrap();
     *value += 1;
     assert_eq!(view.0, 8);
+    let value = run(borrow_inline(&mut view)).unwrap();
+    *value += 1;
+    assert_eq!(view.0, 9);
 }
 
 #[test]
