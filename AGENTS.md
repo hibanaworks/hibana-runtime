@@ -4,6 +4,14 @@ Hibana's global and kernel own protocol order, branch knowledge and Endpoint
 ownership. This crate owns only future storage, pinning, polling and cancellation.
 Do not interpret the global again or add an owner table or protocol cursor here.
 
+Do not add extra structs, enums, managers, registries or wrappers without a
+concrete data-ownership need that existing types, borrows and moves cannot
+express. Never add another source of protocol progress, permission or completion.
+Keep send/recv/offer/par, branches, loops and concurrent completion boundaries
+visible in the participant's localside body; do not hide protocol steps in
+helpers or generated workflow drivers. Codecs, buffers and actual I/O do not
+become another coordination specification.
+
 Keep the execution core `no_std`, allocation-free and caller-stored. Host support
 uses the standard library and operating-system interfaces. Do not add Tokio or
 another async framework, executor, reactor or channel crate. Syntax parsing for
