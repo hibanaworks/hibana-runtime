@@ -380,3 +380,86 @@ fn completed_values_are_destroyed_once_when_a_later_parent_step_fails() {
     assert_eq!(run(program(&drops)), Err(()));
     assert_eq!(drops.get(), 1);
 }
+
+#[test]
+fn error_only_io_children_do_not_need_a_success_type_annotation() {
+    #[scope]
+    async fn program(ready: &Cell<bool>) -> Result<(), &'static str> {
+        async {
+            loop {
+                if ready.get() {
+                    return Err("closed");
+                }
+                hibana_runtime::yield_now().await;
+            }
+        };
+        async {
+            ready.set(true);
+            loop {
+                core::future::pending::<Result<(), &'static str>>().await?;
+            }
+        };
+        Ok(())
+    }
+    assert_eq!(run(program(&Cell::new(false))), Err("closed"));
+}
+
+#[test]
+fn a_data_producing_loop_keeps_its_success_value() {
+    #[scope]
+    async fn program(ready: &Cell<bool>) -> Result<u32, ()> {
+        async {
+            loop {
+                if ready.get() {
+                    return Ok(7);
+                }
+                ready.set(true);
+                hibana_runtime::yield_now().await;
+            }
+        };
+    }
+    assert_eq!(run(program(&Cell::new(false))), Ok(7));
+}
+
+#[test]
+fn a_unit_valued_child_loop_finishes_without_a_manual_ok() {
+    #[scope]
+    async fn program(turns: &Cell<u8>) -> Result<(), ()> {
+        async {
+            'outer: loop {
+                loop {
+                    turns.set(turns.get() + 1);
+                    if turns.get() >= 2 {
+                        break;
+                    }
+                    hibana_runtime::yield_now().await;
+                }
+                if turns.get() >= 2 {
+                    break 'outer;
+                }
+                hibana_runtime::yield_now().await;
+            }
+        };
+        Ok(())
+    }
+    let turns = Cell::new(0);
+    assert_eq!(run(program(&turns)), Ok(()));
+    assert_eq!(turns.get(), 2);
+}
+
+#[test]
+fn a_loop_break_value_is_preserved_as_child_data() {
+    #[scope]
+    async fn program(turns: &Cell<u8>) -> Result<u32, ()> {
+        async {
+            'outer: loop {
+                turns.set(turns.get() + 1);
+                if turns.get() >= 2 {
+                    break 'outer Ok(7);
+                }
+                hibana_runtime::yield_now().await;
+            }
+        };
+    }
+    assert_eq!(run(program(&Cell::new(0))), Ok(7));
+}

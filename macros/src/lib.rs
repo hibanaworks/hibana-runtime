@@ -187,6 +187,94 @@ fn mentions(tokens: Tokens, names: &[String]) -> bool {
     })
 }
 
+fn bare_error(expression: &Expr) -> bool {
+    matches!(expression, Expr::Call(call) if matches!(call.func.as_ref(), Expr::Path(path)
+        if path.path.segments.last().is_some_and(|part| part.ident == "Err")
+        && path.path.segments.iter().all(|part| part.arguments.is_empty())))
+}
+
+/// An error-only child has no success data for its parent to infer. Supply unit
+/// only when the parent discards values and every exit is an untyped Err.
+fn discarded_value(block: &Block, collects: bool) -> Tokens {
+    if !collects && let Some(Stmt::Expr(tail, None)) = block.stmts.last() {
+        if bare_error(tail) {
+            return quote!(());
+        }
+        if let Expr::Loop(repeated) = tail {
+            let mut exits = LoopResults {
+                loops: vec![repeated.label.as_ref().map(|label| label.name.clone())],
+                has_value: false,
+                unit_break: false,
+                value_break: false,
+            };
+            exits.visit_block_mut(&mut repeated.body.clone());
+            if !exits.has_value {
+                return quote!(());
+            }
+        }
+    }
+    quote!(_)
+}
+
+struct LoopResults {
+    loops: Vec<Option<syn::Lifetime>>,
+    has_value: bool,
+    unit_break: bool,
+    value_break: bool,
+}
+
+impl VisitMut for LoopResults {
+    fn visit_expr_break_mut(&mut self, expression: &mut syn::ExprBreak) {
+        let target = match &expression.label {
+            Some(label) => self
+                .loops
+                .iter()
+                .rposition(|scope| scope.as_ref() == Some(label)),
+            None => self.loops.len().checked_sub(1),
+        };
+        if target == Some(0) {
+            self.has_value = true;
+            if expression.expr.is_some() {
+                self.value_break = true;
+            } else {
+                self.unit_break = true;
+            }
+        }
+        visit_mut::visit_expr_break_mut(self, expression);
+    }
+    fn visit_expr_return_mut(&mut self, expression: &mut syn::ExprReturn) {
+        if !expression
+            .expr
+            .as_ref()
+            .is_some_and(|value| bare_error(value))
+        {
+            self.has_value = true;
+        }
+        visit_mut::visit_expr_return_mut(self, expression);
+    }
+    fn visit_expr_loop_mut(&mut self, expression: &mut syn::ExprLoop) {
+        self.loops
+            .push(expression.label.as_ref().map(|label| label.name.clone()));
+        visit_mut::visit_expr_loop_mut(self, expression);
+        self.loops.pop();
+    }
+    fn visit_expr_for_loop_mut(&mut self, expression: &mut syn::ExprForLoop) {
+        self.loops
+            .push(expression.label.as_ref().map(|label| label.name.clone()));
+        visit_mut::visit_expr_for_loop_mut(self, expression);
+        self.loops.pop();
+    }
+    fn visit_expr_while_mut(&mut self, expression: &mut syn::ExprWhile) {
+        self.loops
+            .push(expression.label.as_ref().map(|label| label.name.clone()));
+        visit_mut::visit_expr_while_mut(self, expression);
+        self.loops.pop();
+    }
+    fn visit_expr_async_mut(&mut self, _: &mut syn::ExprAsync) {}
+    fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {}
+    fn visit_item_mut(&mut self, _: &mut syn::Item) {}
+}
+
 fn storage(children: &[Tokens]) -> Tokens {
     match children.len() {
         0 => quote!(()),
@@ -281,6 +369,16 @@ impl Lower {
         let has_value = match block.stmts.last() {
             Some(statement) if declaration(statement) => true,
             Some(Stmt::Expr(Expr::ForLoop(_) | Expr::While(_), None)) => false,
+            Some(Stmt::Expr(Expr::Loop(repeated), None)) => {
+                let mut exits = LoopResults {
+                    loops: vec![repeated.label.as_ref().map(|label| label.name.clone())],
+                    has_value: false,
+                    unit_break: false,
+                    value_break: false,
+                };
+                exits.visit_block_mut(&mut repeated.body.clone());
+                !exits.unit_break || exits.value_break
+            }
             Some(Stmt::Expr(Expr::If(branch), None)) => branch.else_branch.is_some(),
             Some(Stmt::Expr(_, None)) => true,
             _ => false,
@@ -475,11 +573,12 @@ impl Lower {
                     let attrs = child.attrs;
                     let capture = child.capture;
                     let block = child.block;
+                    let value = discarded_value(&block, collects);
                     let future = if let Some(input) = forwarded(&block) {
                         quote!(#input)
                     } else {
                         quote!(::hibana_runtime::__private::call_once(
-                            async #capture || -> ::core::result::Result<_, #error> #block
+                            async #capture || -> ::core::result::Result<#value, #error> #block
                         ))
                     };
                     (attrs, future, false)
@@ -494,12 +593,13 @@ impl Lower {
                         unreachable!()
                     };
                     let block = child.block;
+                    let value = discarded_value(&block, collects);
                     let future = if let Some(input) = forwarded(&block) {
                         quote!(#input)
                     } else {
                         quote!(
                             ::hibana_runtime::__private::call_once(
-                                async move || -> ::core::result::Result<_, #error> #block
+                                async move || -> ::core::result::Result<#value, #error> #block
                             )
                         )
                     };

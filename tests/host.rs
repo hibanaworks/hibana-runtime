@@ -73,7 +73,7 @@ fn host_entry_propagates_child_failure_and_drops_pending_siblings_in_place() {
         };
         async {
             hibana_runtime::yield_now().await;
-            Err::<(), _>("child failed")
+            Err("child failed")
         };
         Ok(())
     }
