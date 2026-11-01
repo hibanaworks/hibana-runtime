@@ -192,6 +192,8 @@ fn main() -> Result<()> {
             "--test",
             "scope_values",
             "--test",
+            "array_configuration",
+            "--test",
             "no_alloc",
             "--test",
             "placement",

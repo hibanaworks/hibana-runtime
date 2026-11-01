@@ -166,6 +166,12 @@ let replies = async {
 // replies is [ReplyValue; N].
 ```
 
+Attributes on an array's child apply to that child. Disabling it with `cfg` or
+`cfg_attr` still evaluates the array input and drops its elements in iteration
+order, including pattern bindings. No child future is created or polled, and
+the disabled declaration contributes no result value. Attributes on the outer
+`for` control the entire declaration, including input evaluation.
+
 Array length supplies the storage size. No declaration attribute, result handle,
 or tuple-arity table is required. Ordinary loops with no async child remain
 sequential. Future variables stay lazy until driven; constructors inside a child

@@ -2,8 +2,10 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as Tokens};
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, Block, Expr, FnArg, ItemFn, Pat, ReturnType, Stmt, Type, parse_macro_input,
-    parse_quote,
+    Attribute, Block, Expr, FnArg, ItemFn, Meta, Pat, ReturnType, Stmt, Token, Type,
+    parse::Parser,
+    parse_macro_input, parse_quote,
+    punctuated::Punctuated,
     visit_mut::{self, VisitMut},
 };
 
@@ -135,6 +137,34 @@ fn array_child(statement: &Stmt) -> Option<&syn::ExprForLoop> {
 
 fn declaration(statement: &Stmt) -> bool {
     matches!(statement, Stmt::Expr(Expr::Async(_), Some(_))) || array_child(statement).is_some()
+}
+
+// Only presence conditions belong on generated output slots. Other attributes
+// remain on the source child's expression, including attributes inside cfg_attr.
+fn configuration(meta: &Meta) -> syn::Result<Option<Meta>> {
+    if meta.path().is_ident("cfg") {
+        return Ok(Some(meta.clone()));
+    }
+    if !meta.path().is_ident("cfg_attr") {
+        return Ok(None);
+    }
+    let list = meta.require_list()?;
+    let arguments = Punctuated::<Meta, Token![,]>::parse_terminated.parse2(list.tokens.clone())?;
+    if arguments.len() < 2 {
+        return Err(syn::Error::new_spanned(
+            meta,
+            "cfg_attr requires a condition and attributes",
+        ));
+    }
+    let mut arguments = arguments.into_iter();
+    let condition = arguments.next().expect("checked cfg_attr condition");
+    let mut attributes = Vec::new();
+    for argument in arguments {
+        if let Some(attribute) = configuration(&argument)? {
+            attributes.push(attribute);
+        }
+    }
+    Ok((!attributes.is_empty()).then(|| parse_quote!(cfg_attr(#condition, #(#attributes),*))))
 }
 
 // Awaiting an owned future variable transfers exactly that future. Retaining
@@ -340,6 +370,20 @@ impl VisitMut for ImmediateBody<'_> {
 }
 
 impl Lower {
+    fn configuration(&mut self, attributes: &[Attribute]) -> Vec<Attribute> {
+        attributes
+            .iter()
+            .filter_map(|attribute| match configuration(&attribute.meta) {
+                Ok(Some(meta)) => Some(parse_quote!(#[#meta])),
+                Ok(None) => None,
+                Err(error) => {
+                    self.diagnostics.extend(error.into_compile_error());
+                    None
+                }
+            })
+            .collect()
+    }
+
     fn name(&mut self, purpose: &str) -> syn::Ident {
         let name = format_ident!(
             "__hibana_{}{}",
@@ -443,22 +487,33 @@ impl Lower {
             .iter()
             .filter(|statement| declaration(statement))
             .map(|statement| {
-                let attrs = match statement {
-                    Stmt::Expr(Expr::Async(child), _) => child.attrs.clone(),
-                    Stmt::Expr(Expr::ForLoop(array), _) => array.attrs.clone(),
+                let (attrs, visible) = match statement {
+                    Stmt::Expr(Expr::Async(child), _) => {
+                        let attrs = self.configuration(&child.attrs);
+                        (attrs.clone(), attrs)
+                    }
+                    Stmt::Expr(Expr::ForLoop(array), _) => {
+                        let attrs = self.configuration(&array.attrs);
+                        let mut visible = attrs.clone();
+                        let Stmt::Expr(Expr::Async(child), _) = &array.body.stmts[0] else {
+                            unreachable!("array child")
+                        };
+                        visible.extend(self.configuration(&child.attrs));
+                        (attrs, visible)
+                    }
                     _ => unreachable!(),
                 };
-                (self.name("value"), attrs)
+                (self.name("value"), attrs, visible)
             })
             .collect();
-        let declarations = outputs.iter().map(|(name, attrs)| {
+        let declarations = outputs.iter().map(|(name, attrs, _)| {
             quote!(
                 #(#attrs)* let mut #name = ::hibana_runtime::__private::empty_values();
             )
         });
         let values: Vec<_> = outputs
             .iter()
-            .map(|(name, attrs)| {
+            .map(|(name, _, attrs)| {
                 quote!(
                     #(#attrs)* ::hibana_runtime::__private::take_values(#name)
                 )
@@ -468,7 +523,7 @@ impl Lower {
             [value] => quote!({ #value }),
             _ => quote!((#(#values,)*)),
         };
-        let slots: Vec<_> = outputs.iter().map(|(name, _)| name.clone()).collect();
+        let slots: Vec<_> = outputs.iter().map(|(name, _, _)| name.clone()).collect();
         let mut source = source;
         let error = &self.error;
         source.push(Stmt::Expr(
@@ -581,7 +636,7 @@ impl Lower {
                             async #capture || -> ::core::result::Result<#value, #error> #block
                         ))
                     };
-                    (attrs, future, false)
+                    (attrs, future, None)
                 }
                 Stmt::Expr(Expr::ForLoop(array), _) => {
                     let attrs = array.attrs;
@@ -592,6 +647,7 @@ impl Lower {
                     else {
                         unreachable!()
                     };
+                    let child_attrs = child.attrs;
                     let block = child.block;
                     let value = discarded_value(&block, collects);
                     let future = if let Some(input) = forwarded(&block) {
@@ -603,13 +659,17 @@ impl Lower {
                             )
                         )
                     };
-                    let future = quote!((#input).map(|#pattern| #future));
-                    (attrs, future, true)
+                    (attrs, future, Some((input, pattern, child_attrs)))
                 }
                 _ => unreachable!("only async and fixed-array declarations"),
             };
             if collects {
                 let slot = outputs.next().expect("one output slot per child");
+                let future = if let Some((input, pattern, child_attrs)) = array {
+                    quote!((#input).map(|#pattern| { #(#child_attrs)* { #future } }))
+                } else {
+                    future
+                };
                 if fused.is_some() {
                     children
                         .push(quote!(::hibana_runtime::__private::input_rows(#future, &mut #slot)));
@@ -625,10 +685,14 @@ impl Lower {
                     ::hibana_runtime::__private::placed_rows::<#error, _>(#pinned)
                 }}));
             } else {
-                let future = if array {
+                let future = if let Some((input, pattern, child_attrs)) = array {
                     quote!(::hibana_runtime::__private::Runtime::<#error, _>::new(
-                        (#future).map(|future| ::hibana_runtime::__private::Leaf {
-                            future: ::core::option::Option::Some(future),
+                        (#input).map(|#pattern| {
+                            #(#child_attrs)* {
+                                ::hibana_runtime::__private::Leaf {
+                                    future: ::core::option::Option::Some(#future),
+                                }
+                            }
                         })
                     ))
                 } else {

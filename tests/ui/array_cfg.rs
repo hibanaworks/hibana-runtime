@@ -19,6 +19,15 @@ async fn program() -> Result<(), ()> {
     }
     .await?;
     let _: () = value;
+    let mut value = 1;
+    for pointer in [&mut value] {
+        #[cfg(any())]
+        async move {
+            *pointer = 2;
+        };
+    }
+    value = 3;
+    assert_eq!(value, 3);
     #[cfg(any())]
     for _ in undefined_array_input() {
         async {

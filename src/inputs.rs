@@ -43,6 +43,14 @@ pub trait Values {
     fn take(self) -> Self::Value;
 }
 
+impl Values for () {
+    type Value = ();
+
+    fn empty() -> Self {}
+
+    fn take(self) {}
+}
+
 impl<T> Values for Option<T> {
     type Value = T;
 
@@ -67,13 +75,20 @@ impl<S: Values, const N: usize> Values for [S; N] {
     }
 }
 
-/// Shape is inferred: a single future uses (), and a fixed array recursively
-/// uses [Shape; N].
+/// Shape is inferred: a single future uses (), an absent child uses [(); 0],
+/// and a fixed array recursively uses [Shape; N].
 pub trait Inputs<'a, Shape>: Sized {
     type Slots: Values + 'a;
     type Rows;
 
     fn rows(self, slots: &'a mut Self::Slots) -> Self::Rows;
+}
+
+impl<'a> Inputs<'a, [(); 0]> for () {
+    type Slots = ();
+    type Rows = ();
+
+    fn rows(self, _: &'a mut Self::Slots) {}
 }
 
 impl<'a, F, T: 'a, E> Inputs<'a, ()> for F
