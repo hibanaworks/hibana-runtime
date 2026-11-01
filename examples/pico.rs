@@ -37,11 +37,11 @@ mod embedded {
         size_of_val(&workload(0, 0))
     }
 
-    #[hibana_runtime::localside]
+    #[hibana_runtime::scope]
     async fn workload(request_steps: u32, audit_steps: u32) -> Result<(), Infallible> {
-        #[localside]
+        #[concurrent]
         Work(core::hint::black_box(request_steps));
-        #[localside]
+        #[concurrent]
         Work(core::hint::black_box(audit_steps));
         Ok(())
     }

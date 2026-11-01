@@ -19,7 +19,7 @@ join trees, task/result tables, duplicate completion checks, application
 schedulers or conversion wrappers. Fix this runtime when direct localside code
 needs an adapter. I/O participants own their data and final I/O; the runtime
 owns polling, cancellation and waiting for children.
-Do not make a per-branch `#[localside]` or `let ()` list the standard consumer
+Do not make a per-branch `#[concurrent]` or `let ()` list the standard consumer
 style. Inline concurrent work uses one function attribute and direct
 `async { ... };` bodies containing the actual Endpoint operations. Bind needed
 parallel results together; keep branch registration, result storage, pinning and
@@ -28,10 +28,24 @@ results or release borrows; do not add async adapters or scopes merely to concea
 An ordinary `async { ... }.await?` is a valid completion and borrowing boundary.
 A one-call async child is valid when it directly expresses independent work.
 Do not invent syntax or duplicate execution APIs just to remove these Rust forms.
-Each result declaration waits only for its explicitly listed futures. Never
-merge result bindings or unrelated children because their declarations are adjacent.
+`#[hibana_runtime::scope]` marks an async scope. Inside it, `#[concurrent]`
+registers an existing future or fixed array; standalone `async { ... };`
+declares an inline child without an attribute on each branch.
+Result declarations concurrently await exactly their explicit inputs and bind
+ordinary successful values before continuing. Use the input pattern to destructure
+tuples from literals, variables, functions, if or match; a single future returning
+a tuple takes one input name. Fixed arrays derive their storage from their actual
+shape. Do not add tuple-arity tables, result receivers, per-result wakers, task
+handles or completion mailboxes. Release future storage and its input borrows
+before the declaration's continuation; returned values keep their own borrows.
+Child errors propagate once and cancel unfinished work. Stored ordinary futures
+stay lazy, independent of whether an initializer is an async literal.
+Keep attributes off ordinary inline branches. Reuse Hibana's Endpoint/par and
+write each complete receive/compute/send flow inside its branch. Add an explicit
+result declaration only where Rust values really merge. Do not turn each Endpoint
+operation into a task or introduce another communication/result-delivery layer.
 
-Use one function attribute, `#[hibana_runtime::localside]`, with Rust async/await
+Use one function attribute, `#[hibana_runtime::scope]`, with Rust async/await
 as the basic interface. Inside that function, write independent branches directly:
 
 ```rust

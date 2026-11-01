@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as Tokens};
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, Block, Expr, FnArg, ItemFn, ReturnType, Stmt, Type,
+    Attribute, Block, Expr, FnArg, ItemFn, Pat, ReturnType, Stmt, Type,
     parse::{ParseStream, Parser},
     parse_macro_input, parse_quote,
     visit_mut::{self, VisitMut},
@@ -10,9 +10,9 @@ use syn::{
 
 /// Drive localside declarations for the lifetime of their enclosing async body.
 #[proc_macro_attribute]
-pub fn localside(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn scope(args: TokenStream, input: TokenStream) -> TokenStream {
     if !args.is_empty() {
-        return syn::Error::new(Span::call_site(), "localside takes no arguments")
+        return syn::Error::new(Span::call_site(), "scope takes no arguments")
             .into_compile_error()
             .into();
     }
@@ -38,7 +38,7 @@ enum Entry {
 
 fn expand(mut function: ItemFn, entry: Option<Entry>) -> TokenStream {
     if function.sig.asyncness.is_none() {
-        return syn::Error::new_spanned(&function.sig, "a localside must be async")
+        return syn::Error::new_spanned(&function.sig, "a scope must be async")
             .into_compile_error()
             .into();
     }
@@ -124,11 +124,7 @@ struct Lower {
 }
 
 fn is_marker(attribute: &Attribute) -> bool {
-    attribute
-        .path()
-        .segments
-        .last()
-        .is_some_and(|s| s.ident == "localside")
+    attribute.path().is_ident("concurrent")
 }
 
 fn parts(statement: &Stmt) -> Option<(Vec<Attribute>, Expr)> {
@@ -175,6 +171,78 @@ fn storage(children: &[Tokens]) -> Tokens {
 }
 
 impl Lower {
+    fn result_pattern(&mut self, pattern: &Pat, inputs: &mut Vec<syn::Ident>) -> (Pat, Tokens) {
+        match pattern {
+            Pat::Tuple(tuple) => {
+                let parts: Vec<_> = tuple
+                    .elems
+                    .iter()
+                    .map(|part| self.result_pattern(part, inputs))
+                    .collect();
+                let patterns = parts.iter().map(|part| &part.0);
+                let values = parts.iter().map(|part| &part.1);
+                (parse_quote!((#(#patterns,)*)), quote!((#(#values,)*)))
+            }
+            Pat::Slice(array) if !array.elems.iter().any(|part| matches!(part, Pat::Rest(_))) => {
+                let parts: Vec<_> = array
+                    .elems
+                    .iter()
+                    .map(|part| self.result_pattern(part, inputs))
+                    .collect();
+                let patterns = parts.iter().map(|part| &part.0);
+                let values = parts.iter().map(|part| &part.1);
+                (parse_quote!([#(#patterns,)*]), quote!([#(#values,)*]))
+            }
+            Pat::Paren(inner) => self.result_pattern(&inner.pat, inputs),
+            Pat::Type(typed) => self.result_pattern(&typed.pat, inputs),
+            Pat::Ident(binding) if binding.by_ref.is_none() && binding.subpat.is_none() => {
+                let input = format_ident!("__hibana_input{}", self.next, span = Span::mixed_site());
+                self.next += 1;
+                inputs.push(input.clone());
+                (parse_quote!(#input), quote!(#input))
+            }
+            Pat::Wild(_) => {
+                let input = format_ident!("__hibana_input{}", self.next, span = Span::mixed_site());
+                self.next += 1;
+                inputs.push(input.clone());
+                (parse_quote!(#input), quote!(#input))
+            }
+            _ => {
+                self.diagnostics.extend(
+                    syn::Error::new_spanned(
+                        pattern,
+                        "declare input futures with names, tuple patterns or fixed array patterns",
+                    )
+                    .into_compile_error(),
+                );
+                (pattern.clone(), quote!(()))
+            }
+        }
+    }
+
+    fn result_future(&self, expr: &Expr) -> Tokens {
+        match expr {
+            Expr::Async(body) => {
+                let attrs = &body.attrs;
+                let capture = &body.capture;
+                let block = &body.block;
+                let error = &self.error;
+                quote!(#(#attrs)* ::hibana_runtime::__private::call_once(
+                    async #capture || -> ::core::result::Result<_, #error> #block
+                ))
+            }
+            Expr::Tuple(tuple) => {
+                let values = tuple.elems.iter().map(|value| self.result_future(value));
+                quote!((#(#values,)*))
+            }
+            Expr::Array(array) => {
+                let values = array.elems.iter().map(|value| self.result_future(value));
+                quote!([#(#values,)*])
+            }
+            _ => quote!(#expr),
+        }
+    }
+
     fn placed(&mut self, attrs: &[Attribute], future: Tokens, placements: &mut Tokens) -> Tokens {
         let name = format_ident!("__hibana_future{}", self.next, span = Span::mixed_site());
         self.next += 1;
@@ -197,8 +265,11 @@ impl Lower {
                 }
                 if !matches!(attr.meta, syn::Meta::Path(_)) {
                     self.diagnostics.extend(
-                        syn::Error::new_spanned(attr, "a localside declaration takes no arguments")
-                            .into_compile_error(),
+                        syn::Error::new_spanned(
+                            attr,
+                            "a concurrent declaration takes no arguments",
+                        )
+                        .into_compile_error(),
                     );
                 }
                 false
@@ -236,7 +307,7 @@ impl Lower {
                     self.diagnostics.extend(
                         syn::Error::new_spanned(
                             &child.label,
-                            "a localside declaration loop has no control-flow label",
+                            "a concurrent declaration loop has no control-flow label",
                         )
                         .into_compile_error(),
                     );
@@ -259,9 +330,8 @@ impl Lower {
             return statements;
         };
         let mut remaining = statements.split_off(first);
-        // A binding waits for its own future (or explicit tuple of futures).
-        // Nearby scoped children keep running with the continuation; their
-        // lifetime must not depend on adjacency to a result declaration.
+        // A value binding waits for precisely its declared inputs. Independent
+        // inline children keep running with the continuation across this join.
         let is_binding = matches!(remaining[0], Stmt::Local(_));
         let count = if is_binding {
             1
@@ -272,12 +342,11 @@ impl Lower {
                 .count()
         };
         let suffix = remaining.split_off(count);
-        let name = format_ident!("__hibana_tasks{}", self.next, span = Span::mixed_site());
         let output = format_ident!("__hibana_output{}", self.next, span = Span::mixed_site());
         self.next += 1;
         let mut slots = Tokens::new();
+        let mut values = Tokens::new();
         let mut placements = Tokens::new();
-        let mut results = Tokens::new();
         let mut children: Vec<_> = remaining
             .into_iter()
             .flat_map(|stmt| {
@@ -286,7 +355,7 @@ impl Lower {
                         self.diagnostics.extend(
                             syn::Error::new_spanned(
                                 local.pat,
-                                "a localside binding requires a future",
+                                "a concurrent declaration requires a future",
                             )
                             .into_compile_error(),
                         );
@@ -296,7 +365,7 @@ impl Lower {
                         self.diagnostics.extend(
                             syn::Error::new_spanned(
                                 init.expr,
-                                "a localside result uses an irrefutable binding",
+                                "a concurrent declaration uses an irrefutable binding",
                             )
                             .into_compile_error(),
                         );
@@ -304,48 +373,44 @@ impl Lower {
                     }
                     let attrs = self.attributes(local.attrs);
                     let pattern = local.pat;
-                    let (futures, grouped) = match init.expr.as_ref() {
-                        Expr::Tuple(tuple) => (tuple.elems.iter().collect::<Vec<_>>(), true),
-                        future => (vec![future], false),
-                    };
-                    let mut values = Vec::new();
-                    let mut children = Vec::new();
-                    for future in futures {
-                        let error = &self.error;
-                        let future = match future {
-                            Expr::Async(body) => {
-                                let attrs = &body.attrs;
-                                let capture = &body.capture;
-                                let block = &body.block;
-                                quote!(#(#attrs)* ::hibana_runtime::__private::call_once(
-                                    async #capture || -> ::core::result::Result<_, #error> #block
-                                ))
-                            }
-                            future => quote!(#future),
-                        };
+                    let mut inputs = Vec::new();
+                    let (input_pattern, result_pattern) =
+                        self.result_pattern(&pattern, &mut inputs);
+                    let future = self.result_future(&init.expr);
+                    let pinned =
+                        format_ident!("__hibana_inputs{}", self.next, span = Span::mixed_site());
+                    self.next += 1;
+                    let mut initialize = Tokens::new();
+                    let mut take = Tokens::new();
+                    let mut rows = Vec::new();
+                    for input in inputs {
                         let slot =
                             format_ident!("__hibana_slot{}", self.next, span = Span::mixed_site());
                         self.next += 1;
-                        slots.extend(
-                            quote!(#(#attrs)* let mut #slot = ::core::option::Option::None;),
+                        slots.extend(quote!(#(#attrs)* let mut #slot;));
+                        initialize.extend(
+                            quote!(#slot = ::hibana_runtime::__private::input_slots(&#input);),
                         );
-                        values
-                            .push(quote!(#slot.expect("completed localside produced its result")));
-                        children.push(self.placed(
-                            &attrs,
-                            quote!(
-                                ::hibana_runtime::__private::store_result(#future, &mut #slot)
-                            ),
-                            &mut placements,
-                        ));
+                        take.extend(
+                            quote!(let #input = ::hibana_runtime::__private::take_values(#slot);),
+                        );
+                        rows.push(
+                            quote!(::hibana_runtime::__private::input_rows(#input, &mut #slot)),
+                        );
                     }
-                    let value = if grouped {
-                        quote!((#(#values,)*))
-                    } else {
-                        values.remove(0)
-                    };
-                    results.extend(quote!(#(#attrs)* let #pattern = #value;));
-                    return children;
+                    let rows = storage(&rows);
+                    placements.extend(quote!(
+                        #(#attrs)* let #pinned = ::core::pin::pin!({
+                            let #input_pattern = #future;
+                            #initialize
+                            #rows
+                        });
+                    ));
+                    values.extend(quote!(#(#attrs)* let #pattern = { #take #result_pattern };));
+                    let error = &self.error;
+                    return vec![quote!({ #(#attrs)* {
+                        ::hibana_runtime::__private::placed_rows::<#error, _>(#pinned)
+                    }})];
                 }
                 let (attrs, future) = parts(&stmt).expect("declaration expression");
                 let attrs = self.attributes(attrs);
@@ -382,16 +447,15 @@ impl Lower {
         let tail: Expr = if is_binding {
             let suffix = self.statements(suffix);
             let rows = storage(&children);
-            parse_quote!(::hibana_runtime::__private::call_once(async || -> ::core::result::Result<_, #error> {
+            parse_quote!({
                 #slots
                 {
                     #placements
-                    let #name = ::hibana_runtime::__private::Runtime::<#error, _>::new(#rows);
-                    #name.await?;
+                    ::hibana_runtime::__private::Runtime::<#error, _>::new(#rows).await?;
                 }
-                #results
-                #(#suffix)*
-            }).await)
+                #values
+                ::hibana_runtime::__private::call_once(async || -> ::core::result::Result<_, #error> { #(#suffix)* }).await
+            })
         } else if suffix.is_empty() {
             let rows = storage(&children);
             parse_quote!({
@@ -443,7 +507,7 @@ impl VisitMut for Lower {
             if declaration(statement) {
                 self.diagnostics.extend(syn::Error::new_spanned(
                     statement,
-                    "localside declarations belong to an async body; ordinary blocks never wait",
+                    "concurrent declarations belong to an async body; ordinary blocks never wait",
                 ).into_compile_error());
             } else {
                 visit_mut::visit_stmt_mut(self, statement);

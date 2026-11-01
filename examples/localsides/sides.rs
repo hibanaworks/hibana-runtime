@@ -5,9 +5,9 @@ use super::protocol::{
 };
 use core::cell::Cell;
 use hibana::{Endpoint, EndpointError};
-use hibana_runtime::localside;
+use hibana_runtime::scope;
 
-#[localside]
+#[scope]
 pub async fn client(
     mut client: Endpoint<CLIENT>,
     update: bool,
@@ -24,7 +24,7 @@ pub async fn client(
     Ok(())
 }
 
-#[localside]
+#[scope]
 pub async fn server(mut server: Endpoint<SERVER>) -> Result<(), EndpointError> {
     let branch = server.offer().await?;
     match branch.label() {
@@ -40,7 +40,7 @@ pub async fn server(mut server: Endpoint<SERVER>) -> Result<(), EndpointError> {
     }
 }
 
-#[localside]
+#[scope]
 pub async fn auditor(
     mut auditor: Endpoint<AUDITOR>,
     result: &Cell<u32>,
@@ -50,7 +50,7 @@ pub async fn auditor(
     Ok(())
 }
 
-#[localside]
+#[scope]
 pub async fn store(mut store: Endpoint<STORE>) -> Result<(), EndpointError> {
     let key = store.recv::<Inspect>().await?;
     store.send::<Count>(&(key * 2)).await

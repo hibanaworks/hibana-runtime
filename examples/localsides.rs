@@ -50,13 +50,13 @@ async fn main() -> Result<(), EndpointError> {
         let count = Cell::new(0);
 
         async {
-            #[localside]
+            #[concurrent]
             sides::server(server);
-            #[localside]
+            #[concurrent]
             sides::store(store);
-            #[localside]
+            #[concurrent]
             sides::client(client, update, &response);
-            #[localside]
+            #[concurrent]
             sides::auditor(auditor, &count);
             Ok(())
         }

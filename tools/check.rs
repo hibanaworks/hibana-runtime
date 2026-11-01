@@ -188,6 +188,8 @@ fn main() -> Result<()> {
             "--test",
             "localside",
             "--test",
+            "results",
+            "--test",
             "no_alloc",
             "--test",
             "placement",

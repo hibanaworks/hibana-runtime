@@ -4,7 +4,7 @@ const CLIENT: u8 = 0;
 const SERVER: u8 = 1;
 
 struct Resource<'a>(&'a mut u32);
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn retain(resource: Resource) -> Result<(), ()> {
     *resource.0 += 1;
     Ok(())

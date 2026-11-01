@@ -1,7 +1,7 @@
 # hibana-runtime
 
 Write localsides with direct Endpoint operations and application effects.
-Their image supplies execution. No task builder, task spawning, `join!`,
+Hibana supplies protocol order; the runtime drives the declared async bodies. No task builder, task spawning, `join!`,
 `select!`, completion handles, or user pinning.
 Rust 2024, unconditional `no_std`, no runtime allocation, caller-owned storage.
 
@@ -29,9 +29,9 @@ loops remain sequential. Array size comes from the inputs, with no task capacity
 spawn handles, result collection loop or heap allocation.
 
 ```rust
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn image(outputs: [&core::cell::Cell<u8>; 3]) -> Result<(), core::convert::Infallible> {
-    #[localside]
+    #[concurrent]
     for output in outputs {
         hibana_runtime::yield_now().await;
         output.set(7);
@@ -99,9 +99,9 @@ async fn image(
     (server, store): (Endpoint<SERVER>, Endpoint<STORE>),
     events: Events,
 ) -> Result<(), EndpointError> {
-    #[localside]
+    #[concurrent]
     sides::server(server);
-    #[localside]
+    #[concurrent]
     sides::store(store);
     Ok(())
 }
@@ -116,7 +116,7 @@ Endpoint pointer crosses the socket.
 
 ## Async bodies own execution
 
-Within an attributed function, `#[localside] future_expression;` registers an
+Within an attributed function, `#[concurrent] future_expression;` registers an
 existing future directly. Calls, methods, future variables, and future-valued
 macros need no `async { ...await }` wrapper. A standalone `async { ... };`
 declares an inline localside when writing its operations in place.
@@ -132,12 +132,16 @@ ownership and lazy parameter destructuring retain async-function behavior.
 Children may borrow caller-owned data and need not be `Send`, `'static`,
 or `Unpin`.
 
-Bind parallel results together when subsequent code needs their values. One
-declaration drives the tuple's futures concurrently and finishes them before the
-following statement:
+Keep each Endpoint's receive, computation and send in its own inline async body.
+Hibana's `par()` supplies the independent fragments; the runtime drives those
+bodies without another protocol cursor or result channel. Branches need no
+individual attributes.
+
+When later code needs several Rust values together, one declaration waits for
+those inputs concurrently, releases their future storage, and binds the values:
 
 ```rust
-#[localside]
+#[concurrent]
 let (first, second) = (
     first_endpoint.recv::<First>(),
     second_endpoint.recv::<Second>(),
@@ -145,15 +149,43 @@ let (first, second) = (
 use_results(first, second);
 ```
 
-The binding contains the successful values, with errors returned from the
-enclosing async body. It waits only for the futures in that declaration;
-previously declared children continue alongside it. Separate bindings wait at
-their own source positions. Use the tuple to request parallel results and
-ordinary `.await?` when only one future's value is needed.
-The runtime retains intermediate results; the application
-does not keep completion flags or result mailboxes. To wait for either of two
-futures, `race(left, right).await` drops the unfinished future when one completes.
-Each future retains its normal cancellation contract.
+The declaration waits only for its own inputs. Other scoped children continue
+alongside it and its continuation. An input error cancels unfinished inputs and
+propagates once through the enclosing async body. The continuation does not run.
+Successful values have ordinary Rust ownership and drop behavior.
+
+The pattern describes the input futures, so a variable or function returning a
+tuple works in the same position:
+
+```rust
+let pending = make_futures();
+#[concurrent]
+let (first, second) = pending;
+```
+
+Tuple length comes from that pattern, with no tuple-arity trait table. A single
+future returning a tuple takes one name: `#[concurrent] let pair = future;`, then
+`let (first, second) = pair;`. Fixed arrays, including nested arrays, produce
+values of the same shape:
+
+```rust
+#[concurrent]
+let replies = views.map(|mut view| async move {
+    view.recv::<Reply>().await
+});
+// replies is [ReplyValue; N], ready to use.
+```
+
+Array patterns can bind individual completed values. Array elements retain Rust's
+requirement to have one concrete type; tuple inputs may have different types.
+Input expressions execute once at their source positions. Ordinary stored futures
+remain lazy until awaited or explicitly declared as concurrent work.
+
+Future storage ends before the declaration's continuation, releasing input
+borrows. Returned values may keep their own borrows of caller data. There are no
+result receivers, extra result wakers or completion flags. To wait for either of
+two futures, `race(left, right).await` drops the unfinished future when one
+completes. Each future retains its normal cancellation contract.
 
 Ordinary `{}` blocks do not introduce waiting, joining, or async destruction.
 Registrations belong directly to an async body. For a nested phase, an ordinary

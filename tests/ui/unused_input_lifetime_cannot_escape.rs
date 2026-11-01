@@ -3,7 +3,7 @@
 const CLIENT: u8 = 0;
 const SERVER: u8 = 1;
 
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn retain(_value: &mut u32) -> Result<(), ()> { Ok(()) }
 fn escape() -> impl core::future::Future<Output = Result<(), ()>> {
     let mut value = 0;

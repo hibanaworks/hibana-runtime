@@ -162,6 +162,39 @@ fn the_first_task_rotates_between_sweeps() {
     assert_eq!(*order.borrow(), [0, 1, 2, 1, 2, 0, 2, 0, 1]);
 }
 
+#[test]
+fn arrays_of_rows_preserve_the_flat_rotation_across_child_boundaries() {
+    let order = RefCell::new(Vec::new());
+    let children = core::array::from_fn::<_, 3, _>(|index| {
+        rows!(
+            RecordPoll {
+                id: (2 * index) as u8,
+                order: &order
+            },
+            RecordPoll {
+                id: (2 * index + 1) as u8,
+                order: &order
+            },
+        )
+    });
+    let mut executor = pin!(hibana_runtime::__private::Runtime::<Infallible, _>::new(
+        children
+    ));
+    for first in 0_u8..6 {
+        assert_eq!(poll(executor.as_mut(), Waker::noop()), Poll::Pending);
+        let expected: Vec<_> = (0..6).map(|offset| (first + offset) % 6).collect();
+        assert_eq!(&order.borrow()[usize::from(first) * 6..], expected);
+    }
+}
+
+#[test]
+fn arrays_of_empty_rows_have_no_poll_or_division() {
+    let mut executor = pin!(hibana_runtime::__private::Runtime::<Infallible, _>::new(
+        [(); 3]
+    ));
+    assert_eq!(poll(executor.as_mut(), Waker::noop()), Poll::Ready(Ok(())));
+}
+
 struct CaptureWaker<'a>(&'a RefCell<Option<Waker>>);
 
 impl Future for CaptureWaker<'_> {

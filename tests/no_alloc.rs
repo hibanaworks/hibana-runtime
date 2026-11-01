@@ -146,14 +146,14 @@ fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program(completed: &Cell<u32>, cancelled: &Cell<usize>) -> Result<(), ()> {
         async {
-            #[localside]
+            #[concurrent]
             effect(completed);
-            #[localside]
+            #[concurrent]
             effect(completed);
             Ok(())
         }
         .await?;
-        #[localside]
+        #[concurrent]
         PendingDrop(cancelled);
         Err(())
     }
@@ -171,8 +171,8 @@ fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
 fn grouped_results_and_their_cancellation_allocate_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program(cancelled: &Cell<usize>) -> Result<(), ()> {
-        #[localside]
-        let values = (
+        #[concurrent]
+        let (first, second) = (
             async {
                 YieldOnce(false).await;
                 Ok(7_u32)
@@ -182,9 +182,9 @@ fn grouped_results_and_their_cancellation_allocate_nothing() {
                 Ok(true)
             },
         );
-        assert_eq!(values, (7, true));
-        #[localside]
-        let _values = (PendingDrop(cancelled), async {
+        assert_eq!((first, second), (7, true));
+        #[concurrent]
+        let (_pending, _failed) = (PendingDrop(cancelled), async {
             YieldOnce(false).await;
             Err::<(), _>(())
         });
@@ -251,23 +251,23 @@ fn localside_declarations_store_their_future_buffer_once() {
             Poll::Ready(Ok(core::hint::black_box(&self.0)[0]))
         }
     }
-    #[hibana_runtime::localside]
+    #[hibana_runtime::scope]
     async fn unbound() -> Result<(), Infallible> {
-        #[localside]
+        #[concurrent]
         Buffered([7; 4096]);
         Ok(())
     }
-    #[hibana_runtime::localside]
+    #[hibana_runtime::scope]
     async fn bound() -> Result<u8, Infallible> {
-        #[localside]
+        #[concurrent]
         let value = Buffered([7; 4096]);
         Ok(value)
     }
-    #[hibana_runtime::localside]
+    #[hibana_runtime::scope]
     async fn child_and_result() -> Result<u8, Infallible> {
-        #[localside]
+        #[concurrent]
         Buffered([8; 4096]);
-        #[localside]
+        #[concurrent]
         let value = Buffered([7; 4096]);
         Ok(value)
     }
@@ -285,6 +285,12 @@ fn localside_declarations_store_their_future_buffer_once() {
         size_of_val(&bound)
     );
     let mixed = child_and_result();
+    println!(
+        "4096-byte input: unbound={}, bound={}, two inputs={}",
+        size_of_val(&unbound),
+        size_of_val(&bound),
+        size_of_val(&mixed),
+    );
     assert!(
         size_of_val(&mixed) <= 2 * budget,
         "child and result use {} bytes; budget {}",
@@ -294,10 +300,71 @@ fn localside_declarations_store_their_future_buffer_once() {
 }
 
 #[test]
+fn variable_and_array_inputs_keep_one_inline_buffer_per_future() {
+    struct Buffered([u8; 4096]);
+    impl Future for Buffered {
+        type Output = Result<u8, Infallible>;
+        fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+            Poll::Ready(Ok(core::hint::black_box(&self.0)[0]))
+        }
+    }
+    fn inputs() -> (Buffered, Buffered) {
+        (Buffered([7; 4096]), Buffered([8; 4096]))
+    }
+    #[hibana_runtime::scope]
+    async fn tuple() -> Result<(u8, u8), Infallible> {
+        let pending = inputs();
+        #[concurrent]
+        let (first, second) = pending;
+        Ok((first, second))
+    }
+    #[hibana_runtime::scope]
+    async fn array() -> Result<[u8; 3], Infallible> {
+        #[concurrent]
+        let values = [7, 8, 9].map(|value| Buffered([value; 4096]));
+        Ok(values)
+    }
+    let tuple = tuple();
+    let array = array();
+    println!(
+        "two variable inputs={}, three array inputs={}",
+        size_of_val(&tuple),
+        size_of_val(&array)
+    );
+    let overhead = 16 * size_of::<usize>();
+    assert!(
+        size_of_val(&tuple) <= 2 * size_of::<Buffered>() + overhead,
+        "tuple={} array={}",
+        size_of_val(&tuple),
+        size_of_val(&array)
+    );
+    assert!(size_of_val(&array) <= 3 * size_of::<Buffered>() + overhead);
+    assert_eq!(
+        allocations_during(|| {
+            assert_eq!(
+                hibana_runtime::__private::block_on(
+                    tuple,
+                    TestDriver(Waker::noop(), || unreachable!())
+                ),
+                Ok((7, 8))
+            );
+            assert_eq!(
+                hibana_runtime::__private::block_on(
+                    array,
+                    TestDriver(Waker::noop(), || unreachable!())
+                ),
+                Ok([7, 8, 9])
+            );
+        }),
+        0
+    );
+}
+
+#[test]
 fn an_explicit_result_group_allocates_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program() -> Result<(u8, u16), ()> {
-        #[localside]
+        #[concurrent]
         let (first, second) = (
             async {
                 hibana_runtime::yield_now().await;
@@ -330,7 +397,7 @@ fn host_entry_waking_and_cancellation_allocate_nothing() {
             Ok(())
         }
         .await?;
-        #[localside]
+        #[concurrent]
         PendingDrop(cancelled);
         hibana_runtime::yield_now().await;
         Err(())
@@ -418,7 +485,7 @@ fn external_notification_construction_cloning_and_waiting_allocate_nothing() {
 fn array_declarations_use_caller_storage_without_allocation() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn image(outputs: [&Cell<u8>; 7]) -> Result<(), Infallible> {
-        #[localside]
+        #[concurrent]
         for output in outputs {
             YieldOnce(false).await;
             output.set(1);

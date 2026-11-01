@@ -14,517 +14,517 @@ async fn task<const SLOT: usize>(completed: &Cell<usize>) -> Result<(), Infallib
 async fn main() -> Result<(), Infallible> {
     let completed = Cell::new(0);
     async {
-        #[localside]
+        #[concurrent]
         task::<0>(&completed);
-        #[localside]
+        #[concurrent]
         task::<1>(&completed);
-        #[localside]
+        #[concurrent]
         task::<2>(&completed);
-        #[localside]
+        #[concurrent]
         task::<3>(&completed);
-        #[localside]
+        #[concurrent]
         task::<4>(&completed);
-        #[localside]
+        #[concurrent]
         task::<5>(&completed);
-        #[localside]
+        #[concurrent]
         task::<6>(&completed);
-        #[localside]
+        #[concurrent]
         task::<7>(&completed);
-        #[localside]
+        #[concurrent]
         task::<8>(&completed);
-        #[localside]
+        #[concurrent]
         task::<9>(&completed);
-        #[localside]
+        #[concurrent]
         task::<10>(&completed);
-        #[localside]
+        #[concurrent]
         task::<11>(&completed);
-        #[localside]
+        #[concurrent]
         task::<12>(&completed);
-        #[localside]
+        #[concurrent]
         task::<13>(&completed);
-        #[localside]
+        #[concurrent]
         task::<14>(&completed);
-        #[localside]
+        #[concurrent]
         task::<15>(&completed);
-        #[localside]
+        #[concurrent]
         task::<16>(&completed);
-        #[localside]
+        #[concurrent]
         task::<17>(&completed);
-        #[localside]
+        #[concurrent]
         task::<18>(&completed);
-        #[localside]
+        #[concurrent]
         task::<19>(&completed);
-        #[localside]
+        #[concurrent]
         task::<20>(&completed);
-        #[localside]
+        #[concurrent]
         task::<21>(&completed);
-        #[localside]
+        #[concurrent]
         task::<22>(&completed);
-        #[localside]
+        #[concurrent]
         task::<23>(&completed);
-        #[localside]
+        #[concurrent]
         task::<24>(&completed);
-        #[localside]
+        #[concurrent]
         task::<25>(&completed);
-        #[localside]
+        #[concurrent]
         task::<26>(&completed);
-        #[localside]
+        #[concurrent]
         task::<27>(&completed);
-        #[localside]
+        #[concurrent]
         task::<28>(&completed);
-        #[localside]
+        #[concurrent]
         task::<29>(&completed);
-        #[localside]
+        #[concurrent]
         task::<30>(&completed);
-        #[localside]
+        #[concurrent]
         task::<31>(&completed);
-        #[localside]
+        #[concurrent]
         task::<32>(&completed);
-        #[localside]
+        #[concurrent]
         task::<33>(&completed);
-        #[localside]
+        #[concurrent]
         task::<34>(&completed);
-        #[localside]
+        #[concurrent]
         task::<35>(&completed);
-        #[localside]
+        #[concurrent]
         task::<36>(&completed);
-        #[localside]
+        #[concurrent]
         task::<37>(&completed);
-        #[localside]
+        #[concurrent]
         task::<38>(&completed);
-        #[localside]
+        #[concurrent]
         task::<39>(&completed);
-        #[localside]
+        #[concurrent]
         task::<40>(&completed);
-        #[localside]
+        #[concurrent]
         task::<41>(&completed);
-        #[localside]
+        #[concurrent]
         task::<42>(&completed);
-        #[localside]
+        #[concurrent]
         task::<43>(&completed);
-        #[localside]
+        #[concurrent]
         task::<44>(&completed);
-        #[localside]
+        #[concurrent]
         task::<45>(&completed);
-        #[localside]
+        #[concurrent]
         task::<46>(&completed);
-        #[localside]
+        #[concurrent]
         task::<47>(&completed);
-        #[localside]
+        #[concurrent]
         task::<48>(&completed);
-        #[localside]
+        #[concurrent]
         task::<49>(&completed);
-        #[localside]
+        #[concurrent]
         task::<50>(&completed);
-        #[localside]
+        #[concurrent]
         task::<51>(&completed);
-        #[localside]
+        #[concurrent]
         task::<52>(&completed);
-        #[localside]
+        #[concurrent]
         task::<53>(&completed);
-        #[localside]
+        #[concurrent]
         task::<54>(&completed);
-        #[localside]
+        #[concurrent]
         task::<55>(&completed);
-        #[localside]
+        #[concurrent]
         task::<56>(&completed);
-        #[localside]
+        #[concurrent]
         task::<57>(&completed);
-        #[localside]
+        #[concurrent]
         task::<58>(&completed);
-        #[localside]
+        #[concurrent]
         task::<59>(&completed);
-        #[localside]
+        #[concurrent]
         task::<60>(&completed);
-        #[localside]
+        #[concurrent]
         task::<61>(&completed);
-        #[localside]
+        #[concurrent]
         task::<62>(&completed);
-        #[localside]
+        #[concurrent]
         task::<63>(&completed);
-        #[localside]
+        #[concurrent]
         task::<64>(&completed);
-        #[localside]
+        #[concurrent]
         task::<65>(&completed);
-        #[localside]
+        #[concurrent]
         task::<66>(&completed);
-        #[localside]
+        #[concurrent]
         task::<67>(&completed);
-        #[localside]
+        #[concurrent]
         task::<68>(&completed);
-        #[localside]
+        #[concurrent]
         task::<69>(&completed);
-        #[localside]
+        #[concurrent]
         task::<70>(&completed);
-        #[localside]
+        #[concurrent]
         task::<71>(&completed);
-        #[localside]
+        #[concurrent]
         task::<72>(&completed);
-        #[localside]
+        #[concurrent]
         task::<73>(&completed);
-        #[localside]
+        #[concurrent]
         task::<74>(&completed);
-        #[localside]
+        #[concurrent]
         task::<75>(&completed);
-        #[localside]
+        #[concurrent]
         task::<76>(&completed);
-        #[localside]
+        #[concurrent]
         task::<77>(&completed);
-        #[localside]
+        #[concurrent]
         task::<78>(&completed);
-        #[localside]
+        #[concurrent]
         task::<79>(&completed);
-        #[localside]
+        #[concurrent]
         task::<80>(&completed);
-        #[localside]
+        #[concurrent]
         task::<81>(&completed);
-        #[localside]
+        #[concurrent]
         task::<82>(&completed);
-        #[localside]
+        #[concurrent]
         task::<83>(&completed);
-        #[localside]
+        #[concurrent]
         task::<84>(&completed);
-        #[localside]
+        #[concurrent]
         task::<85>(&completed);
-        #[localside]
+        #[concurrent]
         task::<86>(&completed);
-        #[localside]
+        #[concurrent]
         task::<87>(&completed);
-        #[localside]
+        #[concurrent]
         task::<88>(&completed);
-        #[localside]
+        #[concurrent]
         task::<89>(&completed);
-        #[localside]
+        #[concurrent]
         task::<90>(&completed);
-        #[localside]
+        #[concurrent]
         task::<91>(&completed);
-        #[localside]
+        #[concurrent]
         task::<92>(&completed);
-        #[localside]
+        #[concurrent]
         task::<93>(&completed);
-        #[localside]
+        #[concurrent]
         task::<94>(&completed);
-        #[localside]
+        #[concurrent]
         task::<95>(&completed);
-        #[localside]
+        #[concurrent]
         task::<96>(&completed);
-        #[localside]
+        #[concurrent]
         task::<97>(&completed);
-        #[localside]
+        #[concurrent]
         task::<98>(&completed);
-        #[localside]
+        #[concurrent]
         task::<99>(&completed);
-        #[localside]
+        #[concurrent]
         task::<100>(&completed);
-        #[localside]
+        #[concurrent]
         task::<101>(&completed);
-        #[localside]
+        #[concurrent]
         task::<102>(&completed);
-        #[localside]
+        #[concurrent]
         task::<103>(&completed);
-        #[localside]
+        #[concurrent]
         task::<104>(&completed);
-        #[localside]
+        #[concurrent]
         task::<105>(&completed);
-        #[localside]
+        #[concurrent]
         task::<106>(&completed);
-        #[localside]
+        #[concurrent]
         task::<107>(&completed);
-        #[localside]
+        #[concurrent]
         task::<108>(&completed);
-        #[localside]
+        #[concurrent]
         task::<109>(&completed);
-        #[localside]
+        #[concurrent]
         task::<110>(&completed);
-        #[localside]
+        #[concurrent]
         task::<111>(&completed);
-        #[localside]
+        #[concurrent]
         task::<112>(&completed);
-        #[localside]
+        #[concurrent]
         task::<113>(&completed);
-        #[localside]
+        #[concurrent]
         task::<114>(&completed);
-        #[localside]
+        #[concurrent]
         task::<115>(&completed);
-        #[localside]
+        #[concurrent]
         task::<116>(&completed);
-        #[localside]
+        #[concurrent]
         task::<117>(&completed);
-        #[localside]
+        #[concurrent]
         task::<118>(&completed);
-        #[localside]
+        #[concurrent]
         task::<119>(&completed);
-        #[localside]
+        #[concurrent]
         task::<120>(&completed);
-        #[localside]
+        #[concurrent]
         task::<121>(&completed);
-        #[localside]
+        #[concurrent]
         task::<122>(&completed);
-        #[localside]
+        #[concurrent]
         task::<123>(&completed);
-        #[localside]
+        #[concurrent]
         task::<124>(&completed);
-        #[localside]
+        #[concurrent]
         task::<125>(&completed);
-        #[localside]
+        #[concurrent]
         task::<126>(&completed);
-        #[localside]
+        #[concurrent]
         task::<127>(&completed);
-        #[localside]
+        #[concurrent]
         task::<128>(&completed);
-        #[localside]
+        #[concurrent]
         task::<129>(&completed);
-        #[localside]
+        #[concurrent]
         task::<130>(&completed);
-        #[localside]
+        #[concurrent]
         task::<131>(&completed);
-        #[localside]
+        #[concurrent]
         task::<132>(&completed);
-        #[localside]
+        #[concurrent]
         task::<133>(&completed);
-        #[localside]
+        #[concurrent]
         task::<134>(&completed);
-        #[localside]
+        #[concurrent]
         task::<135>(&completed);
-        #[localside]
+        #[concurrent]
         task::<136>(&completed);
-        #[localside]
+        #[concurrent]
         task::<137>(&completed);
-        #[localside]
+        #[concurrent]
         task::<138>(&completed);
-        #[localside]
+        #[concurrent]
         task::<139>(&completed);
-        #[localside]
+        #[concurrent]
         task::<140>(&completed);
-        #[localside]
+        #[concurrent]
         task::<141>(&completed);
-        #[localside]
+        #[concurrent]
         task::<142>(&completed);
-        #[localside]
+        #[concurrent]
         task::<143>(&completed);
-        #[localside]
+        #[concurrent]
         task::<144>(&completed);
-        #[localside]
+        #[concurrent]
         task::<145>(&completed);
-        #[localside]
+        #[concurrent]
         task::<146>(&completed);
-        #[localside]
+        #[concurrent]
         task::<147>(&completed);
-        #[localside]
+        #[concurrent]
         task::<148>(&completed);
-        #[localside]
+        #[concurrent]
         task::<149>(&completed);
-        #[localside]
+        #[concurrent]
         task::<150>(&completed);
-        #[localside]
+        #[concurrent]
         task::<151>(&completed);
-        #[localside]
+        #[concurrent]
         task::<152>(&completed);
-        #[localside]
+        #[concurrent]
         task::<153>(&completed);
-        #[localside]
+        #[concurrent]
         task::<154>(&completed);
-        #[localside]
+        #[concurrent]
         task::<155>(&completed);
-        #[localside]
+        #[concurrent]
         task::<156>(&completed);
-        #[localside]
+        #[concurrent]
         task::<157>(&completed);
-        #[localside]
+        #[concurrent]
         task::<158>(&completed);
-        #[localside]
+        #[concurrent]
         task::<159>(&completed);
-        #[localside]
+        #[concurrent]
         task::<160>(&completed);
-        #[localside]
+        #[concurrent]
         task::<161>(&completed);
-        #[localside]
+        #[concurrent]
         task::<162>(&completed);
-        #[localside]
+        #[concurrent]
         task::<163>(&completed);
-        #[localside]
+        #[concurrent]
         task::<164>(&completed);
-        #[localside]
+        #[concurrent]
         task::<165>(&completed);
-        #[localside]
+        #[concurrent]
         task::<166>(&completed);
-        #[localside]
+        #[concurrent]
         task::<167>(&completed);
-        #[localside]
+        #[concurrent]
         task::<168>(&completed);
-        #[localside]
+        #[concurrent]
         task::<169>(&completed);
-        #[localside]
+        #[concurrent]
         task::<170>(&completed);
-        #[localside]
+        #[concurrent]
         task::<171>(&completed);
-        #[localside]
+        #[concurrent]
         task::<172>(&completed);
-        #[localside]
+        #[concurrent]
         task::<173>(&completed);
-        #[localside]
+        #[concurrent]
         task::<174>(&completed);
-        #[localside]
+        #[concurrent]
         task::<175>(&completed);
-        #[localside]
+        #[concurrent]
         task::<176>(&completed);
-        #[localside]
+        #[concurrent]
         task::<177>(&completed);
-        #[localside]
+        #[concurrent]
         task::<178>(&completed);
-        #[localside]
+        #[concurrent]
         task::<179>(&completed);
-        #[localside]
+        #[concurrent]
         task::<180>(&completed);
-        #[localside]
+        #[concurrent]
         task::<181>(&completed);
-        #[localside]
+        #[concurrent]
         task::<182>(&completed);
-        #[localside]
+        #[concurrent]
         task::<183>(&completed);
-        #[localside]
+        #[concurrent]
         task::<184>(&completed);
-        #[localside]
+        #[concurrent]
         task::<185>(&completed);
-        #[localside]
+        #[concurrent]
         task::<186>(&completed);
-        #[localside]
+        #[concurrent]
         task::<187>(&completed);
-        #[localside]
+        #[concurrent]
         task::<188>(&completed);
-        #[localside]
+        #[concurrent]
         task::<189>(&completed);
-        #[localside]
+        #[concurrent]
         task::<190>(&completed);
-        #[localside]
+        #[concurrent]
         task::<191>(&completed);
-        #[localside]
+        #[concurrent]
         task::<192>(&completed);
-        #[localside]
+        #[concurrent]
         task::<193>(&completed);
-        #[localside]
+        #[concurrent]
         task::<194>(&completed);
-        #[localside]
+        #[concurrent]
         task::<195>(&completed);
-        #[localside]
+        #[concurrent]
         task::<196>(&completed);
-        #[localside]
+        #[concurrent]
         task::<197>(&completed);
-        #[localside]
+        #[concurrent]
         task::<198>(&completed);
-        #[localside]
+        #[concurrent]
         task::<199>(&completed);
-        #[localside]
+        #[concurrent]
         task::<200>(&completed);
-        #[localside]
+        #[concurrent]
         task::<201>(&completed);
-        #[localside]
+        #[concurrent]
         task::<202>(&completed);
-        #[localside]
+        #[concurrent]
         task::<203>(&completed);
-        #[localside]
+        #[concurrent]
         task::<204>(&completed);
-        #[localside]
+        #[concurrent]
         task::<205>(&completed);
-        #[localside]
+        #[concurrent]
         task::<206>(&completed);
-        #[localside]
+        #[concurrent]
         task::<207>(&completed);
-        #[localside]
+        #[concurrent]
         task::<208>(&completed);
-        #[localside]
+        #[concurrent]
         task::<209>(&completed);
-        #[localside]
+        #[concurrent]
         task::<210>(&completed);
-        #[localside]
+        #[concurrent]
         task::<211>(&completed);
-        #[localside]
+        #[concurrent]
         task::<212>(&completed);
-        #[localside]
+        #[concurrent]
         task::<213>(&completed);
-        #[localside]
+        #[concurrent]
         task::<214>(&completed);
-        #[localside]
+        #[concurrent]
         task::<215>(&completed);
-        #[localside]
+        #[concurrent]
         task::<216>(&completed);
-        #[localside]
+        #[concurrent]
         task::<217>(&completed);
-        #[localside]
+        #[concurrent]
         task::<218>(&completed);
-        #[localside]
+        #[concurrent]
         task::<219>(&completed);
-        #[localside]
+        #[concurrent]
         task::<220>(&completed);
-        #[localside]
+        #[concurrent]
         task::<221>(&completed);
-        #[localside]
+        #[concurrent]
         task::<222>(&completed);
-        #[localside]
+        #[concurrent]
         task::<223>(&completed);
-        #[localside]
+        #[concurrent]
         task::<224>(&completed);
-        #[localside]
+        #[concurrent]
         task::<225>(&completed);
-        #[localside]
+        #[concurrent]
         task::<226>(&completed);
-        #[localside]
+        #[concurrent]
         task::<227>(&completed);
-        #[localside]
+        #[concurrent]
         task::<228>(&completed);
-        #[localside]
+        #[concurrent]
         task::<229>(&completed);
-        #[localside]
+        #[concurrent]
         task::<230>(&completed);
-        #[localside]
+        #[concurrent]
         task::<231>(&completed);
-        #[localside]
+        #[concurrent]
         task::<232>(&completed);
-        #[localside]
+        #[concurrent]
         task::<233>(&completed);
-        #[localside]
+        #[concurrent]
         task::<234>(&completed);
-        #[localside]
+        #[concurrent]
         task::<235>(&completed);
-        #[localside]
+        #[concurrent]
         task::<236>(&completed);
-        #[localside]
+        #[concurrent]
         task::<237>(&completed);
-        #[localside]
+        #[concurrent]
         task::<238>(&completed);
-        #[localside]
+        #[concurrent]
         task::<239>(&completed);
-        #[localside]
+        #[concurrent]
         task::<240>(&completed);
-        #[localside]
+        #[concurrent]
         task::<241>(&completed);
-        #[localside]
+        #[concurrent]
         task::<242>(&completed);
-        #[localside]
+        #[concurrent]
         task::<243>(&completed);
-        #[localside]
+        #[concurrent]
         task::<244>(&completed);
-        #[localside]
+        #[concurrent]
         task::<245>(&completed);
-        #[localside]
+        #[concurrent]
         task::<246>(&completed);
-        #[localside]
+        #[concurrent]
         task::<247>(&completed);
-        #[localside]
+        #[concurrent]
         task::<248>(&completed);
-        #[localside]
+        #[concurrent]
         task::<249>(&completed);
-        #[localside]
+        #[concurrent]
         task::<250>(&completed);
-        #[localside]
+        #[concurrent]
         task::<251>(&completed);
-        #[localside]
+        #[concurrent]
         task::<252>(&completed);
-        #[localside]
+        #[concurrent]
         task::<253>(&completed);
-        #[localside]
+        #[concurrent]
         task::<254>(&completed);
-        #[localside]
+        #[concurrent]
         task::<255>(&completed);
         Ok(())
     }

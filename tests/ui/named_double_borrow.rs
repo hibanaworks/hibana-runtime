@@ -3,15 +3,15 @@
 const CLIENT: u8 = 0;
 const SERVER: u8 = 1;
 
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn send(endpoint: &mut hibana::Endpoint<CLIENT>) -> Result<(), hibana::EndpointError> {
     endpoint.send::<hibana::g::Msg<1, u32>>(&7).await
 }
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn example(mut a: hibana::Endpoint<CLIENT>) -> Result<(), hibana::EndpointError> {
-    #[localside]
+    #[concurrent]
     send(&mut a);
-    #[localside]
+    #[concurrent]
     send(&mut a);
     Ok(())
 }

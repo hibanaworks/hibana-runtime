@@ -3,9 +3,9 @@
 const CLIENT: u8 = 0;
 const SERVER: u8 = 1;
 
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn example() -> Result<(), ()> {
-    #[localside(role = 0)]
+    #[concurrent(role = 0)]
     core::future::ready(Ok::<(), ()>(()));
     Ok(())
 }

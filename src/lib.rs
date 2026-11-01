@@ -1,6 +1,6 @@
 //! Localsides declare work; their async bodies own its execution.
 //!
-//! In an attributed async function, `#[localside] worker(...);` declares a
+//! In an attributed async function, `#[concurrent] worker(...);` declares a
 //! named localside directly. Standalone `async { ... };` statements declare
 //! inline localsides. They run concurrently with the rest of their async body and
 //! finish before that future returns. Ordinary blocks never wait. An explicit
@@ -33,7 +33,7 @@
 //!
 //! ```compile_fail,E0499
 //! const CLIENT: u8 = 0;
-//! #[hibana_runtime::localside]
+//! #[hibana_runtime::scope]
 //! async fn conflicting(mut endpoint: hibana::Endpoint<CLIENT>) -> Result<(), hibana::EndpointError> {
 //!     async { endpoint.send::<hibana::g::Msg<1, u32>>(&7).await };
 //!     async { endpoint.send::<hibana::g::Msg<2, u32>>(&8).await };
@@ -44,7 +44,7 @@
 //! Moving an owned future into two declarations is also rejected:
 //!
 //! ```compile_fail,E0382
-//! #[hibana_runtime::localside]
+//! #[hibana_runtime::scope]
 //! async fn duplicated() -> Result<(), ()> {
 //!     let future = async { Ok::<(), ()>(()) };
 //!     async { future.await };
@@ -60,9 +60,10 @@ extern crate std;
 mod executor;
 #[cfg(feature = "host")]
 pub mod host;
+mod inputs;
 
 pub use executor::Driver;
-pub use hibana_runtime_macros::{localside, main};
+pub use hibana_runtime_macros::{main, scope};
 
 /// Give other localsides a turn before continuing a computation.
 ///
@@ -107,11 +108,6 @@ struct Race<L, R> {
     left_first: bool,
 }
 
-struct StoreResult<'a, F, V> {
-    future: F,
-    output: &'a mut Option<V>,
-}
-
 struct Placed<'a, F> {
     future: core::pin::Pin<&'a mut Option<F>>,
 }
@@ -140,34 +136,6 @@ impl<F: core::future::Future> core::future::Future for Placed<'_, F> {
 impl<F> Drop for Placed<'_, F> {
     fn drop(&mut self) {
         self.future.set(None);
-    }
-}
-
-impl<F, V, E> core::future::Future for StoreResult<'_, F, V>
-where
-    F: core::future::Future<Output = Result<V, E>>,
-{
-    type Output = Result<(), E>;
-
-    fn poll(
-        self: core::pin::Pin<&mut Self>,
-        cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Self::Output> {
-        // SAFETY: future is a private structurally pinned field. The separate
-        // output reference is unpinned, and neither field is moved here. There
-        // is no custom Drop or Unpin implementation.
-        let (future, output) = unsafe {
-            let store = self.get_unchecked_mut();
-            (
-                core::pin::Pin::new_unchecked(&mut store.future),
-                &mut store.output,
-            )
-        };
-        future.poll(cx).map(|result| {
-            result.map(|value| {
-                **output = Some(value);
-            })
-        })
     }
 }
 
@@ -221,7 +189,9 @@ impl<L: core::future::Future, R: core::future::Future<Output = L::Output>> core:
 /// Implementation details used by generated code, not an application API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::executor::placed_rows;
     pub use crate::executor::{Leaf, Pair, Runtime};
+    pub use crate::inputs::{input_rows, input_slots, take_values};
 
     /// Borrow a future's final inline slot, dropping it in place on completion
     /// or cancellation. Storage construction moves only this reference.
@@ -239,7 +209,7 @@ pub mod __private {
     where
         F: core::future::Future<Output = Result<V, E>>,
     {
-        super::StoreResult { future, output }
+        crate::inputs::StoreResult { future, output }
     }
 
     /// Consume an async closure so its returned future owns its captures.

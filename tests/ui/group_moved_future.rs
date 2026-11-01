@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 #![forbid(long_running_const_eval)]
 
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn example() -> Result<(), ()> {
     let work = async { Ok::<_, ()>(7) };
-    #[localside]
-    let _values = (work, work);
+    #[concurrent]
+    let (_first, _second) = (work, work);
     Ok(())
 }
 

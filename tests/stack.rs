@@ -43,37 +43,37 @@ fn buffered(completed: &Cell<usize>) -> Buffered<'_> {
 
 #[hibana_runtime::main(Ready)]
 async fn image(completed: &Cell<usize>) -> Result<(), Infallible> {
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
-    #[localside]
+    #[concurrent]
     buffered(completed);
     Ok(())
 }

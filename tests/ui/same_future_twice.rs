@@ -3,7 +3,7 @@
 const CLIENT: u8 = 0;
 const SERVER: u8 = 1;
 
-#[hibana_runtime::localside]
+#[hibana_runtime::scope]
 async fn example() -> Result<(), ()> {
     let future = async { Ok::<(), ()>(()) };
     async { future.await };

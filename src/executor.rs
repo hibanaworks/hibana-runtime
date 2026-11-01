@@ -16,6 +16,41 @@ impl<E, T: private::Rows<E>> Localsides<E> for T {}
 
 pub use private::{Leaf, Pair};
 
+pub struct PlacedRows<'a, E, T: Localsides<E>> {
+    rows: Pin<&'a mut T>,
+    error: PhantomData<fn() -> E>,
+}
+
+pub fn placed_rows<E, T: Localsides<E>>(rows: Pin<&mut T>) -> PlacedRows<'_, E, T> {
+    PlacedRows {
+        rows,
+        error: PhantomData,
+    }
+}
+
+impl<E, T: Localsides<E>> private::Rows<E> for PlacedRows<'_, E, T> {
+    const LEN: usize = T::LEN;
+
+    fn poll_range(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        start: usize,
+        end: usize,
+    ) -> Result<usize, E> {
+        self.get_mut().rows.as_mut().poll_range(cx, start, end)
+    }
+
+    fn cancel(self: Pin<&mut Self>) {
+        self.get_mut().rows.as_mut().cancel();
+    }
+}
+
+impl<E, T: Localsides<E>> Drop for PlacedRows<'_, E, T> {
+    fn drop(&mut self) {
+        self.rows.as_mut().cancel();
+    }
+}
+
 /// Platform integration for waking and parking the runtime.
 ///
 /// The entry-point attribute uses a configured driver. A host or board
@@ -192,11 +227,11 @@ mod private {
         }
     }
 
-    impl<E, F, const N: usize> Rows<E> for [Leaf<F>; N]
+    impl<E, T, const N: usize> Rows<E> for [T; N]
     where
-        Leaf<F>: Rows<E>,
+        T: Rows<E>,
     {
-        const LEN: usize = N;
+        const LEN: usize = N * T::LEN;
 
         fn poll_range(
             self: Pin<&mut Self>,
@@ -204,20 +239,25 @@ mod private {
             start: usize,
             end: usize,
         ) -> Result<usize, E> {
-            if start >= end {
+            if start >= end || T::LEN == 0 {
                 return Ok(0);
             }
             // SAFETY: array elements are structurally pinned. Convert directly
             // to a raw element pointer; slice indexing would create references
             // to the entire array, including other futures' pinned borrows.
-            let rows = unsafe { self.get_unchecked_mut() } as *mut [Leaf<F>; N];
-            let rows = rows.cast::<Leaf<F>>();
+            let rows = unsafe { self.get_unchecked_mut() } as *mut [T; N];
+            let rows = rows.cast::<T>();
             let mut pending = 0;
-            for index in start.min(N)..end.min(N) {
+            let first = (start / T::LEN).min(N);
+            let last = end.min(Self::LEN).div_ceil(T::LEN);
+            for index in first..last {
                 // SAFETY: index is within the array and only this element is
                 // reborrowed. Its address remains stable and no element moves.
-                pending +=
-                    unsafe { Pin::new_unchecked(&mut *rows.add(index)) }.poll_range(cx, 0, 1)?;
+                pending += unsafe { Pin::new_unchecked(&mut *rows.add(index)) }.poll_range(
+                    cx,
+                    start.saturating_sub(index * T::LEN),
+                    (end - index * T::LEN).min(T::LEN),
+                )?;
             }
             Ok(pending)
         }
@@ -225,8 +265,8 @@ mod private {
         fn cancel(self: Pin<&mut Self>) {
             // SAFETY: retain each element's pin and avoid references to the
             // whole array while its futures contain active self borrows.
-            let rows = unsafe { self.get_unchecked_mut() } as *mut [Leaf<F>; N];
-            let rows = rows.cast::<Leaf<F>>();
+            let rows = unsafe { self.get_unchecked_mut() } as *mut [T; N];
+            let rows = rows.cast::<T>();
             for index in 0..N {
                 // SAFETY: index is in bounds. Only this stable element is
                 // reborrowed and Leaf::cancel drops its future in place.

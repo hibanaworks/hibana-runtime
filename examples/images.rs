@@ -36,18 +36,18 @@ mod host {
         (update, values): (bool, &[Cell<u32>; 2]),
         events: Events,
     ) -> Outcome {
-        #[localside]
+        #[concurrent]
         sides::client(client, update, &values[0]);
-        #[localside]
+        #[concurrent]
         sides::auditor(auditor, &values[1]);
         Ok(())
     }
 
     #[hibana_runtime::main(events)]
     async fn services(endpoints: (Endpoint<SERVER>, Endpoint<STORE>), events: Events) -> Outcome {
-        #[localside]
+        #[concurrent]
         sides::server(endpoints.0);
-        #[localside]
+        #[concurrent]
         sides::store(endpoints.1);
         Ok(())
     }
