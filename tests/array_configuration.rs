@@ -34,14 +34,14 @@ fn ordinary_drops() -> u64 {
 #[test]
 fn disabled_array_children_keep_input_evaluation_and_pattern_drops() {
     #[scope]
-    async fn program(calls: &Cell<u32>, drops: &Cell<u64>, effects: &Cell<u32>) -> Outcome<u64> {
+    async fn program(calls: &Cell<u32>, drops: &Cell<u64>, _effects: &Cell<u32>) -> Outcome<u64> {
         for (_first, _second) in {
             calls.set(calls.get() + 1);
             pairs(drops)
         } {
             #[cfg(any())]
             async move {
-                effects.set(effects.get() + 1);
+                _effects.set(_effects.get() + 1);
                 drop(_second);
             };
         }
@@ -56,23 +56,25 @@ fn disabled_array_children_keep_input_evaluation_and_pattern_drops() {
 #[test]
 fn disabled_collected_array_has_no_child_values() {
     #[scope]
-    async fn program(calls: &Cell<u32>, drops: &Cell<u64>, effects: &Cell<u32>) -> Outcome {
-        let values = async {
-            for (_first, _second) in {
-                calls.set(calls.get() + 1);
-                pairs(drops)
-            } {
-                #[cfg(any())]
-                async move {
-                    effects.set(effects.get() + 1);
-                    drop(_first);
-                    drop(_second);
-                    Ok(17u8)
-                };
+    async fn program(calls: &Cell<u32>, drops: &Cell<u64>, _effects: &Cell<u32>) -> Outcome {
+        let result_size = core::mem::size_of_val(
+            &async {
+                for (_first, _second) in {
+                    calls.set(calls.get() + 1);
+                    pairs(drops)
+                } {
+                    #[cfg(any())]
+                    async move {
+                        _effects.set(_effects.get() + 1);
+                        drop(_first);
+                        drop(_second);
+                        Ok(17u8)
+                    };
+                }
             }
-        }
-        .await?;
-        assert_eq!(core::mem::size_of_val(&values), 0);
+            .await?,
+        );
+        assert_eq!(result_size, 0);
         assert_eq!(drops.get(), ordinary_drops());
         Ok(())
     }
@@ -87,7 +89,7 @@ fn enabled_array_children_return_values_after_pending() {
     #[scope]
     async fn program(effects: &Cell<u32>) -> Outcome<[u32; 2]> {
         for value in [3, 7] {
-            #[cfg(all())]
+            #[cfg(test)]
             async move {
                 hibana_runtime::yield_now().await;
                 effects.set(effects.get() + 1);
@@ -103,14 +105,14 @@ fn enabled_array_children_return_values_after_pending() {
 #[test]
 fn cfg_attr_can_disable_discarded_array_children() {
     #[scope]
-    async fn program(calls: &Cell<u32>, effects: &Cell<u32>) -> Outcome {
+    async fn program(calls: &Cell<u32>, _effects: &Cell<u32>) -> Outcome {
         for _value in {
             calls.set(calls.get() + 1);
             [3, 7]
         } {
-            #[cfg_attr(all(), cfg(any()))]
+            #[cfg_attr(test, cfg(any()))]
             async move {
-                effects.set(effects.get() + 1);
+                _effects.set(_effects.get() + 1);
             };
         }
         Ok(())
@@ -124,21 +126,23 @@ fn cfg_attr_can_disable_discarded_array_children() {
 #[test]
 fn nested_cfg_attr_can_disable_collected_array_children() {
     #[scope]
-    async fn program(calls: &Cell<u32>, effects: &Cell<u32>) -> Outcome {
-        let values = async {
-            for _value in {
-                calls.set(calls.get() + 1);
-                [3, 7]
-            } {
-                #[cfg_attr(all(), cfg_attr(all(), cfg(any())))]
-                async move {
-                    effects.set(effects.get() + 1);
-                    Ok(17u8)
-                };
+    async fn program(calls: &Cell<u32>, _effects: &Cell<u32>) -> Outcome {
+        let result_size = core::mem::size_of_val(
+            &async {
+                for _value in {
+                    calls.set(calls.get() + 1);
+                    [3, 7]
+                } {
+                    #[cfg_attr(test, cfg_attr(test, cfg(any())))]
+                    async move {
+                        _effects.set(_effects.get() + 1);
+                        Ok(17u8)
+                    };
+                }
             }
-        }
-        .await?;
-        assert_eq!(core::mem::size_of_val(&values), 0);
+            .await?,
+        );
+        assert_eq!(result_size, 0);
         Ok(())
     }
     let (calls, effects) = (Cell::new(0), Cell::new(0));
@@ -166,7 +170,7 @@ fn enabled_cfg_attr_preserves_body_lints_and_values() {
     #[scope]
     async fn program() -> Outcome<[u32; 2]> {
         for value in [3, 7] {
-            #[cfg_attr(all(), cfg(all()), allow(unused_mut))]
+            #[cfg_attr(test, cfg(test), allow(unused_mut))]
             async move {
                 let mut result = value;
                 Ok(result)
@@ -179,7 +183,7 @@ fn enabled_cfg_attr_preserves_body_lints_and_values() {
 #[test]
 fn disabled_children_do_not_disable_the_awaited_array_input() {
     #[scope]
-    async fn program(input_effects: &Cell<u32>, child_effects: &Cell<u32>) -> Outcome {
+    async fn program(input_effects: &Cell<u32>, _child_effects: &Cell<u32>) -> Outcome {
         for _value in (async {
             async {
                 hibana_runtime::yield_now().await;
@@ -191,7 +195,7 @@ fn disabled_children_do_not_disable_the_awaited_array_input() {
         {
             #[cfg(any())]
             async move {
-                child_effects.set(child_effects.get() + 1);
+                _child_effects.set(_child_effects.get() + 1);
             };
         }
         Ok(())
@@ -207,7 +211,7 @@ fn child_lint_expectations_are_applied_once_for_array_values() {
     #[scope]
     async fn program() -> Outcome<[u32; 2]> {
         for value in [3, 7] {
-            #[cfg_attr(all(), expect(unused_mut))]
+            #[cfg_attr(test, expect(unused_mut))]
             async move {
                 let mut result = value;
                 Ok(result)
