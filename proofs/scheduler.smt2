@@ -2,7 +2,8 @@
 ; This is not a Rust refinement or a protocol, Waker, or pin-safety proof.
 ; Each block first checks satisfiable premises, then refutes a bad outcome.
 ; Expected result sequence: (sat unsat) repeated eight times.
-(set-logic QF_AUFLIA)
+; Constant arrays use Z3's array extensions.
+(set-logic ALL)
 (declare-const n Int)
 (declare-const first Int)
 (declare-const offset Int)
