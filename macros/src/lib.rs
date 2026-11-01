@@ -257,7 +257,18 @@ impl Lower {
             return statements;
         };
         let mut remaining = statements.split_off(first);
-        let count = remaining.iter().take_while(|s| declaration(s)).count();
+        // A binding waits for its own future (or explicit tuple of futures).
+        // Nearby scoped children keep running with the continuation; their
+        // lifetime must not depend on adjacency to a result declaration.
+        let is_binding = matches!(remaining[0], Stmt::Local(_));
+        let count = if is_binding {
+            1
+        } else {
+            remaining
+                .iter()
+                .take_while(|s| declaration(s) && !matches!(s, Stmt::Local(_)))
+                .count()
+        };
         let suffix = remaining.split_off(count);
         let name = format_ident!("__hibana_tasks{}", self.next, span = Span::mixed_site());
         let output = format_ident!("__hibana_output{}", self.next, span = Span::mixed_site());
@@ -265,12 +276,10 @@ impl Lower {
         let mut slots = Tokens::new();
         let mut placements = Tokens::new();
         let mut results = Tokens::new();
-        let mut has_results = false;
         let mut children: Vec<_> = remaining
             .into_iter()
             .flat_map(|stmt| {
                 if let Stmt::Local(local) = stmt {
-                    has_results = true;
                     let Some(init) = local.init else {
                         self.diagnostics.extend(
                             syn::Error::new_spanned(
@@ -368,7 +377,7 @@ impl Lower {
             })
             .collect();
         let error = self.error.clone();
-        let tail: Expr = if has_results {
+        let tail: Expr = if is_binding {
             let suffix = self.statements(suffix);
             let rows = storage(&children);
             parse_quote!(::hibana_runtime::__private::call_once(async || -> ::core::result::Result<_, #error> {

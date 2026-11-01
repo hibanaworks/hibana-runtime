@@ -25,6 +25,11 @@ style. Inline concurrent work uses one function attribute and direct
 parallel results together; keep branch registration, result storage, pinning and
 child completion inside the runtime. Retain explicit boundaries needed to consume
 results or release borrows; do not add async adapters or scopes merely to conceal management code.
+An ordinary `async { ... }.await?` is a valid completion and borrowing boundary.
+A one-call async child is valid when it directly expresses independent work.
+Do not invent syntax or duplicate execution APIs just to remove these Rust forms.
+Each result declaration waits only for its explicitly listed futures. Never
+merge result bindings or unrelated children because their declarations are adjacent.
 Declare repeated participants from their actual fixed arrays. Do not make
 consumers construct task collections, spawn handles, polling loops or result
 collection loops. Ordinary unmarked Rust loops keep their sequential meaning.

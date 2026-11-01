@@ -146,7 +146,11 @@ use_results(first, second);
 ```
 
 The binding contains the successful values, with errors returned from the
-enclosing async body. The runtime retains intermediate results; the application
+enclosing async body. It waits only for the futures in that declaration;
+previously declared children continue alongside it. Separate bindings wait at
+their own source positions. Use the tuple to request parallel results and
+ordinary `.await?` when only one future's value is needed.
+The runtime retains intermediate results; the application
 does not keep completion flags or result mailboxes. To wait for either of two
 futures, `race(left, right).await` drops the unfinished future when one completes.
 Each future retains its normal cancellation contract.

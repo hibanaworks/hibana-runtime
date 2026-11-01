@@ -263,6 +263,14 @@ fn localside_declarations_store_their_future_buffer_once() {
         let value = Buffered([7; 4096]);
         Ok(value)
     }
+    #[hibana_runtime::localside]
+    async fn child_and_result() -> Result<u8, Infallible> {
+        #[localside]
+        Buffered([8; 4096]);
+        #[localside]
+        let value = Buffered([7; 4096]);
+        Ok(value)
+    }
     let budget = size_of::<Buffered>() + 16 * size_of::<usize>();
     let unbound = unbound();
     let bound = bound();
@@ -276,22 +284,30 @@ fn localside_declarations_store_their_future_buffer_once() {
         "bound localside uses {} bytes; budget {budget}",
         size_of_val(&bound)
     );
+    let mixed = child_and_result();
+    assert!(
+        size_of_val(&mixed) <= 2 * budget,
+        "child and result use {} bytes; budget {}",
+        size_of_val(&mixed),
+        2 * budget,
+    );
 }
 
 #[test]
-fn concurrent_result_bindings_allocate_nothing() {
+fn an_explicit_result_group_allocates_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program() -> Result<(u8, u16), ()> {
         #[localside]
-        let first = async {
-            hibana_runtime::yield_now().await;
-            Ok::<_, ()>(7u8)
-        };
-        #[localside]
-        let second = async {
-            hibana_runtime::yield_now().await;
-            Ok::<_, ()>(8u16)
-        };
+        let (first, second) = (
+            async {
+                hibana_runtime::yield_now().await;
+                Ok::<_, ()>(7u8)
+            },
+            async {
+                hibana_runtime::yield_now().await;
+                Ok::<_, ()>(8u16)
+            },
+        );
         Ok((first, second))
     }
     assert_eq!(allocations_during(|| assert_eq!(program(), Ok((7, 8)))), 0);

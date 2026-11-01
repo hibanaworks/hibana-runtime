@@ -613,22 +613,113 @@ fn argument_destructuring_and_receiver_ownership_match_async_functions() {
 }
 
 #[test]
-fn result_bindings_run_concurrently_and_release_borrows_before_the_continuation() {
+fn a_result_binding_does_not_wait_for_an_adjacent_scoped_child() {
+    #[localside]
+    async fn image(stopped: &Cell<bool>) -> Outcome<u32> {
+        let reply_used = Cell::new(false);
+        async {
+            while !reply_used.get() {
+                yield_once().await;
+            }
+            stopped.set(true);
+        };
+        #[localside]
+        let reply = async {
+            yield_once().await;
+            Ok(42)
+        };
+        reply_used.set(true);
+        Ok(reply)
+    }
+    let stopped = Cell::new(false);
+    assert_eq!(run(image(&stopped)), Ok(42));
+    assert!(stopped.get());
+}
+
+#[test]
+fn separate_result_bindings_wait_at_their_own_source_positions() {
+    fn request(order: &Cell<u8>, expected: u8) -> impl Future<Output = Outcome<u8>> {
+        assert_eq!(order.get(), expected, "request constructed too early");
+        async move {
+            yield_once().await;
+            order.set(expected + 1);
+            Ok(expected)
+        }
+    }
+    #[localside]
+    async fn image(order: &Cell<u8>) -> Outcome<(u8, u8)> {
+        #[localside]
+        let first = request(order, 0);
+        #[localside]
+        let second = request(order, 1);
+        Ok((first, second))
+    }
+    let order = Cell::new(0);
+    assert_eq!(run(image(&order)), Ok((0, 1)));
+    assert_eq!(order.get(), 2);
+}
+
+#[test]
+fn a_result_is_available_to_an_immediately_following_scoped_child() {
+    #[localside]
+    async fn image(value: &Cell<u32>) -> Outcome {
+        #[localside]
+        let reply = async {
+            yield_once().await;
+            Ok(42)
+        };
+        async {
+            yield_once().await;
+            value.set(reply);
+        };
+        Ok(())
+    }
+    let value = Cell::new(0);
+    run(image(&value)).unwrap();
+    assert_eq!(value.get(), 42);
+}
+
+#[test]
+fn a_result_group_error_cancels_an_earlier_scoped_child() {
+    #[localside]
+    async fn image(drops: &Cell<u32>, constructed: &Cell<bool>) -> Outcome {
+        async { Never(drops).await };
+        #[localside]
+        let _results = (async { Ok(7_u8) }, async {
+            yield_once().await;
+            Err::<(), _>("request failed")
+        });
+        #[localside]
+        let _later = {
+            constructed.set(true);
+            async { Ok(()) }
+        };
+        Ok(())
+    }
+    let (drops, constructed) = (Cell::new(0), Cell::new(false));
+    assert_eq!(run(image(&drops, &constructed)), Err("request failed"));
+    assert_eq!(drops.get(), 1);
+    assert!(!constructed.get());
+}
+
+#[test]
+fn an_explicit_result_group_releases_borrows_before_the_continuation() {
     #[localside]
     async fn program(left: &mut u32, right: &mut u32) -> Outcome<(u32, u32)> {
         let result = async {
             #[localside]
-            let a = async {
-                yield_once().await;
-                *left += 1;
-                Ok::<_, &'static str>(*left)
-            };
-            #[localside]
-            let b = async {
-                yield_once().await;
-                *right += 2;
-                Ok::<_, &'static str>(*right)
-            };
+            let (a, b) = (
+                async {
+                    yield_once().await;
+                    *left += 1;
+                    Ok::<_, &'static str>(*left)
+                },
+                async {
+                    yield_once().await;
+                    *right += 2;
+                    Ok::<_, &'static str>(*right)
+                },
+            );
             Ok((a, b))
         }
         .await?;
@@ -789,15 +880,16 @@ fn nested_result_bindings_infer_an_error_with_multiple_conversions() {
     async fn program() -> Result<u32, Error> {
         let (a, b) = async {
             #[localside]
-            let a = async {
-                hibana_runtime::yield_now().await;
-                Ok(7u32)
-            };
-            #[localside]
-            let b = async {
-                hibana_runtime::yield_now().await;
-                Ok(8u32)
-            };
+            let (a, b) = (
+                async {
+                    hibana_runtime::yield_now().await;
+                    Ok(7u32)
+                },
+                async {
+                    hibana_runtime::yield_now().await;
+                    Ok(8u32)
+                },
+            );
             Ok((a, b))
         }
         .await?;
@@ -887,16 +979,17 @@ fn failed_result_binding_cancels_its_pending_sibling_without_running_the_continu
     async fn program(dropped: &Cell<u32>) -> Outcome {
         let probe = OnDrop(dropped);
         #[localside]
-        let a = async move {
-            let _probe = probe;
-            core::future::pending::<()>().await;
-            Ok::<_, &'static str>(())
-        };
-        #[localside]
-        let b = async {
-            yield_once().await;
-            Err::<(), _>("failed")
-        };
+        let (a, b) = (
+            async move {
+                let _probe = probe;
+                core::future::pending::<()>().await;
+                Ok::<_, &'static str>(())
+            },
+            async {
+                yield_once().await;
+                Err::<(), _>("failed")
+            },
+        );
         let _ = (a, b);
         panic!("failed localsides must not run the continuation")
     }
