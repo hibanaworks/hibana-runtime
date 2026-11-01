@@ -14,19 +14,13 @@
 //! #     fn waker(&self) -> Waker { Waker::noop().clone() }
 //! #     fn wait(&mut self) {}
 //! # }
-//! async fn write(value: &Cell<u32>, next: u32) -> Result<(), Infallible> {
-//!     value.set(next);
-//!     Ok(())
-//! }
 //! #[hibana_runtime::main(Events)]
 //! async fn example() -> Result<(), Infallible> {
 //!     let responses = Cell::new(0);
 //!     let audits = Cell::new(0);
 //!     async {
-//!         #[localside]
-//!         write(&responses, 7);
-//!         #[localside]
-//!         write(&audits, 8);
+//!         async { responses.set(7); };
+//!         async { audits.set(8); };
 //!         Ok(())
 //!     }.await?;
 //!     assert_eq!((responses.get(), audits.get()), (7, 8));

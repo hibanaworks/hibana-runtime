@@ -168,6 +168,37 @@ fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
 }
 
 #[test]
+fn grouped_results_and_their_cancellation_allocate_nothing() {
+    #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
+    async fn program(cancelled: &Cell<usize>) -> Result<(), ()> {
+        #[localside]
+        let values = (
+            async {
+                YieldOnce(false).await;
+                Ok(7_u32)
+            },
+            async {
+                YieldOnce(false).await;
+                Ok(true)
+            },
+        );
+        assert_eq!(values, (7, true));
+        #[localside]
+        let _values = (PendingDrop(cancelled), async {
+            YieldOnce(false).await;
+            Err::<(), _>(())
+        });
+        panic!("cancelled result group must not continue")
+    }
+    let cancelled = Cell::new(0);
+    assert_eq!(
+        allocations_during(|| assert_eq!(program(&cancelled), Err(()))),
+        0
+    );
+    assert_eq!(cancelled.get(), 1);
+}
+
+#[test]
 fn racing_releases_the_pending_future_before_the_completed_race_is_dropped() {
     let cancelled = Cell::new(0);
     assert_eq!(

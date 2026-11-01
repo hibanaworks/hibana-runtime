@@ -268,44 +268,73 @@ impl Lower {
         let mut has_results = false;
         let mut children: Vec<_> = remaining
             .into_iter()
-            .map(|stmt| {
+            .flat_map(|stmt| {
                 if let Stmt::Local(local) = stmt {
                     has_results = true;
                     let Some(init) = local.init else {
-                        self.diagnostics.extend(syn::Error::new_spanned(
-                            local.pat,
-                            "a localside binding requires a future",
-                        ).into_compile_error());
-                        return Tokens::new();
+                        self.diagnostics.extend(
+                            syn::Error::new_spanned(
+                                local.pat,
+                                "a localside binding requires a future",
+                            )
+                            .into_compile_error(),
+                        );
+                        return Vec::new();
                     };
                     if init.diverge.is_some() {
-                        self.diagnostics.extend(syn::Error::new_spanned(
-                            init.expr,
-                            "a localside result uses an irrefutable binding",
-                        ).into_compile_error());
-                        return Tokens::new();
+                        self.diagnostics.extend(
+                            syn::Error::new_spanned(
+                                init.expr,
+                                "a localside result uses an irrefutable binding",
+                            )
+                            .into_compile_error(),
+                        );
+                        return Vec::new();
                     }
                     let attrs = self.attributes(local.attrs);
                     let pattern = local.pat;
-                    let error = &self.error;
-                    let future = match init.expr.as_ref() {
-                        Expr::Async(body) => {
-                            let attrs = &body.attrs;
-                            let capture = &body.capture;
-                            let block = &body.block;
-                            quote!(#(#attrs)* ::hibana_runtime::__private::call_once(
-                                async #capture || -> ::core::result::Result<_, #error> #block
-                            ))
-                        }
-                        future => quote!(#future),
+                    let (futures, grouped) = match init.expr.as_ref() {
+                        Expr::Tuple(tuple) => (tuple.elems.iter().collect::<Vec<_>>(), true),
+                        future => (vec![future], false),
                     };
-                    let slot = format_ident!("__hibana_slot{}", self.next, span = Span::mixed_site());
-                    self.next += 1;
-                    slots.extend(quote!(#(#attrs)* let mut #slot = ::core::option::Option::None;));
-                    results.extend(quote!(#(#attrs)* let #pattern = #slot.expect("completed localside produced its result");));
-                    return self.placed(&attrs, quote!(
-                        ::hibana_runtime::__private::store_result(#future, &mut #slot)
-                    ), &mut placements);
+                    let mut values = Vec::new();
+                    let mut children = Vec::new();
+                    for future in futures {
+                        let error = &self.error;
+                        let future = match future {
+                            Expr::Async(body) => {
+                                let attrs = &body.attrs;
+                                let capture = &body.capture;
+                                let block = &body.block;
+                                quote!(#(#attrs)* ::hibana_runtime::__private::call_once(
+                                    async #capture || -> ::core::result::Result<_, #error> #block
+                                ))
+                            }
+                            future => quote!(#future),
+                        };
+                        let slot =
+                            format_ident!("__hibana_slot{}", self.next, span = Span::mixed_site());
+                        self.next += 1;
+                        slots.extend(
+                            quote!(#(#attrs)* let mut #slot = ::core::option::Option::None;),
+                        );
+                        values
+                            .push(quote!(#slot.expect("completed localside produced its result")));
+                        children.push(self.placed(
+                            &attrs,
+                            quote!(
+                                ::hibana_runtime::__private::store_result(#future, &mut #slot)
+                            ),
+                            &mut placements,
+                        ));
+                    }
+                    let value = if grouped {
+                        quote!((#(#values,)*))
+                    } else {
+                        values.remove(0)
+                    };
+                    results.extend(quote!(#(#attrs)* let #pattern = #value;));
+                    return children;
                 }
                 let (attrs, future) = parts(&stmt).expect("declaration expression");
                 let attrs = self.attributes(attrs);
@@ -323,7 +352,7 @@ impl Lower {
                             ),
                         })
                     ));
-                    return self.placed(&attrs, future, &mut placements);
+                    return vec![self.placed(&attrs, future, &mut placements)];
                 }
                 if let Expr::Async(child) = &future {
                     let child_attrs = &child.attrs;
@@ -333,9 +362,9 @@ impl Lower {
                     let future = quote!(#(#child_attrs)* ::hibana_runtime::__private::call_once(
                         async #capture || -> ::core::result::Result<(), #error> #block
                     ));
-                    return self.placed(&attrs, future, &mut placements);
+                    return vec![self.placed(&attrs, future, &mut placements)];
                 }
-                self.placed(&attrs, quote!(#future), &mut placements)
+                vec![self.placed(&attrs, quote!(#future), &mut placements)]
             })
             .collect();
         let error = self.error.clone();

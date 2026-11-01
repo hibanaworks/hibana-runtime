@@ -19,6 +19,12 @@ join trees, task/result tables, duplicate completion checks, application
 schedulers or conversion wrappers. Fix this runtime when direct localside code
 needs an adapter. I/O participants own their data and final I/O; the runtime
 owns polling, cancellation and waiting for children.
+Do not make a per-branch `#[localside]` or `let ()` list the standard consumer
+style. Inline concurrent work uses one function attribute and direct
+`async { ... };` bodies containing the actual Endpoint operations. Bind needed
+parallel results together; keep branch registration, result storage, pinning and
+child completion inside the runtime. Retain explicit boundaries needed to consume
+results or release borrows; do not add async adapters or scopes merely to conceal management code.
 Declare repeated participants from their actual fixed arrays. Do not make
 consumers construct task collections, spawn handles, polling loops or result
 collection loops. Ordinary unmarked Rust loops keep their sequential meaning.

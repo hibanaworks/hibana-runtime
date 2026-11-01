@@ -19,6 +19,8 @@ fn compiler_checks_exclusive_views_moves_and_scoped_borrows() -> std::io::Result
         ("same_view_twice", Some("E0499")),
         ("array_double_borrow", Some("E0499")),
         ("bound_result_double_borrow", Some("E0499")),
+        ("group_double_borrow", Some("E0499")),
+        ("group_moved_future", Some("E0382")),
         ("same_future_twice", Some("E0382")),
         ("move_borrowed_view", Some("E0505")),
         ("named_double_borrow", Some("E0499")),

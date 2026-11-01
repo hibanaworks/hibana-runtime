@@ -643,6 +643,134 @@ fn result_bindings_run_concurrently_and_release_borrows_before_the_continuation(
 }
 
 #[test]
+fn a_result_group_drives_different_futures_and_releases_their_borrows() {
+    async fn first(value: &mut u32, started: &Cell<u8>) -> Outcome<u32> {
+        started.set(started.get() | 1);
+        while started.get() != 3 {
+            yield_once().await;
+        }
+        *value += 1;
+        Ok(*value)
+    }
+    #[localside]
+    async fn image(left: &mut u32, right: &mut bool) -> Outcome<(u32, bool)> {
+        let started = Cell::new(0);
+        #[localside]
+        let (a, b) = (first(left, &started), async {
+            started.set(started.get() | 2);
+            while started.get() != 3 {
+                yield_once().await;
+            }
+            *right = true;
+            Ok(*right)
+        });
+        *left += 10;
+        *right = false;
+        Ok((a, b))
+    }
+    let (mut left, mut right) = (7, false);
+    assert_eq!(run(image(&mut left, &mut right)), Ok((8, true)));
+    assert_eq!((left, right), (18, false));
+}
+
+#[test]
+fn result_groups_keep_constructor_order_cfg_and_nested_child_completion() {
+    fn task<'a>(order: &'a Cell<u8>, index: u8) -> impl Future<Output = Outcome<u8>> + 'a {
+        assert_eq!(order.get(), index);
+        order.set(index + 1);
+        async move {
+            assert_eq!(order.get(), 2);
+            yield_once().await;
+            Ok(index)
+        }
+    }
+    #[localside]
+    async fn image(order: &Cell<u8>, child: &Cell<bool>) -> Outcome {
+        #[localside]
+        #[cfg(any())]
+        let absent = (undefined(), undefined());
+        #[localside]
+        let (a, b, c) = (task(order, 0), task(order, 1), async {
+            async {
+                yield_once().await;
+                child.set(true);
+            };
+            Ok(7_u16)
+        });
+        assert_eq!((a, b, c), (0, 1, 7));
+        assert!(child.get());
+        Ok(())
+    }
+    run(image(&Cell::new(0), &Cell::new(false))).unwrap();
+}
+
+#[test]
+fn grouped_results_can_borrow_the_callers_inputs_after_the_scope_returns() {
+    #[localside]
+    async fn image<'a>(
+        left: &'a mut u32,
+        right: &'a mut bool,
+    ) -> Outcome<(&'a mut u32, &'a mut bool)> {
+        #[localside]
+        let result = (
+            async {
+                yield_once().await;
+                Ok(left)
+            },
+            async {
+                yield_once().await;
+                Ok(right)
+            },
+        );
+        Ok(result)
+    }
+    let (mut left, mut right) = (7, false);
+    let (a, b) = run(image(&mut left, &mut right)).unwrap();
+    *a = 42;
+    *b = true;
+    assert_eq!((left, right), (42, true));
+}
+
+#[test]
+fn a_failed_result_group_cancels_its_siblings_and_drops_completed_results() {
+    #[derive(Debug)]
+    struct Value<'a>(&'a Cell<u32>);
+    impl Drop for Value<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    #[localside]
+    async fn image(pending: &Cell<u32>, completed: &Cell<u32>) -> Outcome {
+        #[localside]
+        let _results = (Never(pending), async { Ok(Value(completed)) }, async {
+            yield_once().await;
+            Err::<(), _>("failed")
+        });
+        panic!("a failed result group must not run its continuation")
+    }
+    let (pending, completed) = (Cell::new(0), Cell::new(0));
+    assert_eq!(run(image(&pending, &completed)), Err("failed"));
+    assert_eq!((pending.get(), completed.get()), (1, 1));
+}
+
+#[test]
+fn a_group_constructor_error_drops_earlier_unpolled_inputs_once() {
+    fn fail() -> Outcome<Never<'static>> {
+        Err("construct")
+    }
+    #[localside]
+    async fn image(drops: &Cell<u32>) -> Outcome {
+        #[localside]
+        let _results = (Never(drops), fail()?);
+        panic!("a failed constructor must not run its continuation")
+    }
+    let drops = Cell::new(0);
+    assert_eq!(run(image(&drops)), Err("construct"));
+    assert_eq!(drops.get(), 1);
+}
+
+#[test]
 fn nested_result_bindings_infer_an_error_with_multiple_conversions() {
     #[derive(Debug, PartialEq)]
     struct Error;

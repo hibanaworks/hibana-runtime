@@ -132,18 +132,20 @@ ownership and lazy parameter destructuring retain async-function behavior.
 Children may borrow caller-owned data and need not be `Send`, `'static`,
 or `Unpin`.
 
-Bind results when subsequent code needs the values. A contiguous group of
-bindings runs concurrently and finishes before the following statement:
+Bind parallel results together when subsequent code needs their values. One
+declaration drives the tuple's futures concurrently and finishes them before the
+following statement:
 
 ```rust
 #[localside]
-let first = first_endpoint.recv::<First>();
-#[localside]
-let second = second_endpoint.recv::<Second>();
+let (first, second) = (
+    first_endpoint.recv::<First>(),
+    second_endpoint.recv::<Second>(),
+);
 use_results(first, second);
 ```
 
-The bindings contain the successful values, with errors returned from the
+The binding contains the successful values, with errors returned from the
 enclosing async body. The runtime retains intermediate results; the application
 does not keep completion flags or result mailboxes. To wait for either of two
 futures, `race(left, right).await` drops the unfinished future when one completes.
