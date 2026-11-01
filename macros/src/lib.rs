@@ -396,11 +396,12 @@ impl Lower {
     }
 
     fn placed(&mut self, attrs: &[Attribute], future: Tokens, placements: &mut Tokens) -> Tokens {
+        let configuration = self.configuration(attrs);
         let name = self.name("future");
         placements.extend(quote!(
             #(#attrs)* let #name = ::core::pin::pin!(::core::option::Option::Some(#future));
         ));
-        quote!({ #(#attrs)* {
+        quote!({ #(#configuration)* {
             ::hibana_runtime::__private::Leaf {
                 future: ::core::option::Option::Some(::hibana_runtime::__private::placed(#name)),
             }
@@ -676,12 +677,13 @@ impl Lower {
                     continue;
                 }
                 let pinned = self.name("inputs");
+                let configuration = self.configuration(&attrs);
                 placements.extend(quote!(
                     #(#attrs)* let #pinned = ::core::pin::pin!(
                         ::hibana_runtime::__private::input_rows(#future, &mut #slot)
                     );
                 ));
-                children.push(quote!({ #(#attrs)* {
+                children.push(quote!({ #(#configuration)* {
                     ::hibana_runtime::__private::placed_rows::<#error, _>(#pinned)
                 }}));
             } else {

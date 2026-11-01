@@ -201,3 +201,32 @@ fn disabled_children_do_not_disable_the_awaited_array_input() {
     assert_eq!(input_effects.get(), 1);
     assert_eq!(child_effects.get(), 0);
 }
+
+#[test]
+fn child_lint_expectations_are_applied_once_for_array_values() {
+    #[scope]
+    async fn program() -> Outcome<[u32; 2]> {
+        for value in [3, 7] {
+            #[cfg_attr(all(), expect(unused_mut))]
+            async move {
+                let mut result = value;
+                Ok(result)
+            };
+        }
+    }
+    assert_eq!(run(program()), Ok([3, 7]));
+}
+
+#[test]
+fn child_lint_expectations_are_applied_once_for_discarded_children() {
+    #[scope]
+    async fn program() -> Outcome {
+        #[expect(unused_mut)]
+        async {
+            let mut result = 7;
+            assert_eq!(result, 7);
+        };
+        Ok(())
+    }
+    assert_eq!(run(program()), Ok(()));
+}
