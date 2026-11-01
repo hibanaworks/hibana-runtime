@@ -60,10 +60,12 @@ fn expand(mut function: ItemFn, entry: Option<Entry>) -> TokenStream {
         let body = function.block;
         function.block = Box::new(match entry {
             Entry::Driver(driver) => parse_quote!({
-                ::hibana_runtime::__private::block_on(async move #body, #driver)
+                ::hibana_runtime::__private::block_on(
+                    ::core::pin::pin!(async move #body), #driver
+                )
             }),
             Entry::Host => parse_quote!({
-                ::hibana_runtime::__private::host_block_on(async move #body)
+                ::hibana_runtime::__private::host_block_on(::core::pin::pin!(async move #body))
             }),
         });
     } else {

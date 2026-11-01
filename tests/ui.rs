@@ -46,6 +46,7 @@ fn compiler_checks_exclusive_views_moves_and_scoped_borrows() -> std::io::Result
             .args([
                 "+stable",
                 "check",
+                "--color=never",
                 "--message-format=short",
                 "-j",
                 "1",
