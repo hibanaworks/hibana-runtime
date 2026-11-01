@@ -365,7 +365,7 @@ fn infallible_errors_are_inferred_for_tail_values_and_early_returns() {
 }
 
 #[test]
-fn named_localsides_are_constructed_at_declaration_and_driven_without_wrappers() {
+fn future_inputs_are_constructed_before_their_children_are_polled() {
     fn task<'a>(
         constructed: &'a Cell<u32>,
         finished: &'a Cell<u32>,
@@ -386,10 +386,10 @@ fn named_localsides_are_constructed_at_declaration_and_driven_without_wrappers()
         let constructed = Cell::new(0);
         let finished = Cell::new(0);
         async {
-            #[concurrent]
-            task(&constructed, &finished);
-            #[concurrent]
-            task(&constructed, &finished);
+            let first = task(&constructed, &finished);
+            let second = task(&constructed, &finished);
+            async { first.await };
+            async { second.await };
             Ok(())
         }
         .await?;
@@ -420,19 +420,20 @@ fn named_localsides_support_methods_paths_macros_cfg_and_cancellation() {
     async fn program(finished: &Cell<u32>, drops: &Cell<u32>) -> Outcome {
         let work = Work(finished);
         async {
-            #[concurrent]
             #[cfg(any())]
-            not_defined();
-            #[concurrent]
-            work.execute();
-            #[concurrent]
-            future!();
+            async {
+                (not_defined()).await
+            };
+
+            async { (work.execute()).await };
+
+            async { (future!()).await };
             Ok(())
         }
         .await?;
         let pending = Never(drops);
-        #[concurrent]
-        pending;
+
+        async { (pending).await };
         Err("cancel")
     }
     let finished = Cell::new(0);
@@ -449,10 +450,9 @@ fn constructor_error_drops_previously_declared_unpolled_futures() {
     }
     #[scope]
     async fn program(drops: &Cell<u32>) -> Outcome {
-        #[concurrent]
-        Never(drops);
-        #[concurrent]
-        fail()?;
+        async { (Never(drops)).await };
+
+        async { (fail()?).await };
         Ok(())
     }
     let drops = Cell::new(0);
@@ -623,11 +623,12 @@ fn a_result_binding_does_not_wait_for_an_adjacent_scoped_child() {
             }
             stopped.set(true);
         };
-        #[concurrent]
-        let reply = async {
+
+        let reply = (async {
             yield_once().await;
             Ok(42)
-        };
+        })
+        .await?;
         reply_used.set(true);
         Ok(reply)
     }
@@ -648,10 +649,9 @@ fn separate_result_bindings_wait_at_their_own_source_positions() {
     }
     #[scope]
     async fn image(order: &Cell<u8>) -> Outcome<(u8, u8)> {
-        #[concurrent]
-        let first = request(order, 0);
-        #[concurrent]
-        let second = request(order, 1);
+        let first = (request(order, 0)).await?;
+
+        let second = (request(order, 1)).await?;
         Ok((first, second))
     }
     let order = Cell::new(0);
@@ -663,11 +663,11 @@ fn separate_result_bindings_wait_at_their_own_source_positions() {
 fn a_result_is_available_to_an_immediately_following_scoped_child() {
     #[scope]
     async fn image(value: &Cell<u32>) -> Outcome {
-        #[concurrent]
-        let reply = async {
+        let reply = (async {
             yield_once().await;
             Ok(42)
-        };
+        })
+        .await?;
         async {
             yield_once().await;
             value.set(reply);
@@ -684,16 +684,21 @@ fn a_result_group_error_cancels_an_earlier_scoped_child() {
     #[scope]
     async fn image(drops: &Cell<u32>, constructed: &Cell<bool>) -> Outcome {
         async { Never(drops).await };
-        #[concurrent]
-        let (_first, _second) = (async { Ok(7_u8) }, async {
-            yield_once().await;
-            Err::<(), _>("request failed")
-        });
-        #[concurrent]
-        let _later = {
+
+        let (_first, _second) = (async {
+            async { Ok(7_u8) };
+            async {
+                yield_once().await;
+                Err::<(), _>("request failed")
+            };
+        })
+        .await?;
+
+        ({
             constructed.set(true);
             async { Ok(()) }
-        };
+        })
+        .await?;
         Ok(())
     }
     let (drops, constructed) = (Cell::new(0), Cell::new(false));
@@ -707,19 +712,19 @@ fn an_explicit_result_group_releases_borrows_before_the_continuation() {
     #[scope]
     async fn program(left: &mut u32, right: &mut u32) -> Outcome<(u32, u32)> {
         let result = async {
-            #[concurrent]
-            let (a, b) = (
+            let (a, b) = (async {
                 async {
                     yield_once().await;
                     *left += 1;
                     Ok::<_, &'static str>(*left)
-                },
+                };
                 async {
                     yield_once().await;
                     *right += 2;
                     Ok::<_, &'static str>(*right)
-                },
-            );
+                };
+            })
+            .await?;
             Ok((a, b))
         }
         .await?;
@@ -746,15 +751,19 @@ fn a_result_group_drives_different_futures_and_releases_their_borrows() {
     #[scope]
     async fn image(left: &mut u32, right: &mut bool) -> Outcome<(u32, bool)> {
         let started = Cell::new(0);
-        #[concurrent]
-        let (a, b) = (first(left, &started), async {
-            started.set(started.get() | 2);
-            while started.get() != 3 {
-                yield_once().await;
-            }
-            *right = true;
-            Ok(*right)
-        });
+
+        let (a, b) = (async {
+            async { (first(left, &started)).await };
+            async {
+                started.set(started.get() | 2);
+                while started.get() != 3 {
+                    yield_once().await;
+                }
+                *right = true;
+                Ok(*right)
+            };
+        })
+        .await?;
         *left += 10;
         *right = false;
         Ok((a, b))
@@ -777,17 +786,27 @@ fn result_groups_keep_constructor_order_cfg_and_nested_child_completion() {
     }
     #[scope]
     async fn image(order: &Cell<u8>, child: &Cell<bool>) -> Outcome {
-        #[concurrent]
         #[cfg(any())]
-        let (_absent_a, _absent_b) = (undefined(), undefined());
-        #[concurrent]
-        let (a, b, c) = (task(order, 0), task(order, 1), async {
+        let (_absent_a, _absent_b) = (async {
+            async { (undefined()).await };
+            async { (undefined()).await };
+        })
+        .await?;
+
+        let (a, b, c) = (async {
+            let first = task(order, 0);
+            let second = task(order, 1);
+            async { first.await };
+            async { second.await };
             async {
-                yield_once().await;
-                child.set(true);
+                async {
+                    yield_once().await;
+                    child.set(true);
+                };
+                Ok(7_u16)
             };
-            Ok(7_u16)
-        });
+        })
+        .await?;
         assert_eq!((a, b, c), (0, 1, 7));
         assert!(child.get());
         Ok(())
@@ -802,17 +821,17 @@ fn grouped_results_can_borrow_the_callers_inputs_after_the_scope_returns() {
         left: &'a mut u32,
         right: &'a mut bool,
     ) -> Outcome<(&'a mut u32, &'a mut bool)> {
-        #[concurrent]
-        let (left, right) = (
+        let (left, right) = (async {
             async {
                 yield_once().await;
                 Ok(left)
-            },
+            };
             async {
                 yield_once().await;
                 Ok(right)
-            },
-        );
+            };
+        })
+        .await?;
         Ok((left, right))
     }
     let (mut left, mut right) = (7, false);
@@ -833,12 +852,15 @@ fn a_failed_result_group_cancels_its_siblings_and_drops_completed_results() {
     }
     #[scope]
     async fn image(pending: &Cell<u32>, completed: &Cell<u32>) -> Outcome {
-        #[concurrent]
-        let (_pending, _completed, _failed) =
-            (Never(pending), async { Ok(Value(completed)) }, async {
+        let (_pending, _completed, _failed) = (async {
+            async { (Never(pending)).await };
+            async { Ok(Value(completed)) };
+            async {
                 yield_once().await;
                 Err::<(), _>("failed")
-            });
+            };
+        })
+        .await?;
         panic!("a failed result group must not run its continuation")
     }
     let (pending, completed) = (Cell::new(0), Cell::new(0));
@@ -853,8 +875,11 @@ fn a_group_constructor_error_drops_earlier_unpolled_inputs_once() {
     }
     #[scope]
     async fn image(drops: &Cell<u32>) -> Outcome {
-        #[concurrent]
-        let (_pending, _failed) = (Never(drops), fail()?);
+        let (_pending, _failed) = (async {
+            async { (Never(drops)).await };
+            async { (fail()?).await };
+        })
+        .await?;
         panic!("a failed constructor must not run its continuation")
     }
     let drops = Cell::new(0);
@@ -880,18 +905,16 @@ fn nested_result_bindings_infer_an_error_with_multiple_conversions() {
     #[scope]
     async fn program() -> Result<u32, Error> {
         let (a, b) = async {
-            #[concurrent]
-            let (a, b) = (
+            async {
                 async {
                     hibana_runtime::yield_now().await;
                     Ok(7u32)
-                },
-                async {
-                    hibana_runtime::yield_now().await;
-                    Ok(8u32)
-                },
-            );
-            Ok((a, b))
+                };
+            };
+            async {
+                hibana_runtime::yield_now().await;
+                Ok(8u32)
+            };
         }
         .await?;
         Ok(a + b)
@@ -923,10 +946,9 @@ fn named_localsides_convert_their_errors_and_cancel_a_pending_sibling() {
     }
     #[scope]
     async fn program(drops: &Cell<u32>, continued: &Cell<bool>) -> Result<(), Error> {
-        #[concurrent]
-        fail();
-        #[concurrent]
-        waiting(drops);
+        async { (fail()).await };
+
+        async { (waiting(drops)).await };
         core::future::pending::<()>().await;
         continued.set(true);
         Ok(())
@@ -949,14 +971,12 @@ fn a_bound_result_can_borrow_a_callers_view_after_the_scope_returns() {
     }
     #[scope]
     async fn borrow(view: &mut View) -> Outcome<&mut u32> {
-        #[concurrent]
-        let value = view.borrow_value();
+        let value = (view.borrow_value()).await?;
         Ok(value)
     }
     #[scope]
     async fn borrow_inline(view: &mut View) -> Outcome<&mut u32> {
-        #[concurrent]
-        let value = async { view.borrow_value().await };
+        let value = (async { view.borrow_value().await }).await?;
         Ok(value)
     }
     let mut view = View(7);
@@ -979,18 +999,19 @@ fn failed_result_binding_cancels_its_pending_sibling_without_running_the_continu
     #[scope]
     async fn program(dropped: &Cell<u32>) -> Outcome {
         let probe = OnDrop(dropped);
-        #[concurrent]
-        let (a, b) = (
+
+        let (a, b) = (async {
             async move {
                 let _probe = probe;
                 core::future::pending::<()>().await;
                 Ok::<_, &'static str>(())
-            },
+            };
             async {
                 yield_once().await;
                 Err::<(), _>("failed")
-            },
-        );
+            };
+        })
+        .await?;
         let _ = (a, b);
         panic!("failed localsides must not run the continuation")
     }
@@ -1003,13 +1024,14 @@ fn failed_result_binding_cancels_its_pending_sibling_without_running_the_continu
 fn declared_array_localsides_overlap_and_keep_borrowed_inputs() {
     #[scope]
     async fn image(values: [&Cell<u8>; 3], arrived: &Cell<u8>) -> Outcome {
-        #[concurrent]
         for (bit, value) in [(1, values[0]), (2, values[1]), (4, values[2])] {
-            arrived.set(arrived.get() | bit);
-            while arrived.get() != 7 {
-                yield_once().await;
-            }
-            value.set(bit);
+            async move {
+                arrived.set(arrived.get() | bit);
+                while arrived.get() != 7 {
+                    yield_once().await;
+                }
+                value.set(bit);
+            };
         }
         Ok(())
     }
@@ -1023,9 +1045,10 @@ fn declared_array_localsides_overlap_and_keep_borrowed_inputs() {
 fn an_empty_declaration_array_finishes_without_a_poll_slot() {
     #[scope]
     async fn image(values: [u8; 0]) -> Outcome {
-        #[concurrent]
         for value in values {
-            assert_eq!(value, 0);
+            async move {
+                assert_eq!(value, 0);
+            };
         }
         Ok(())
     }
@@ -1036,7 +1059,6 @@ fn an_empty_declaration_array_finishes_without_a_poll_slot() {
 fn declaration_array_input_awaits_its_nested_localsides_before_returning() {
     #[scope]
     async fn image(done: &Cell<bool>, seen: &Cell<u8>) -> Outcome {
-        #[concurrent]
         for value in (async {
             async {
                 yield_once().await;
@@ -1046,8 +1068,10 @@ fn declaration_array_input_awaits_its_nested_localsides_before_returning() {
         })
         .await?
         {
-            assert!(done.get());
-            seen.set(seen.get() + value);
+            async move {
+                assert!(done.get());
+                seen.set(seen.get() + value);
+            };
         }
         assert!(done.get());
         Ok(())
@@ -1062,7 +1086,6 @@ fn declaration_array_input_awaits_its_nested_localsides_before_returning() {
 fn declaration_array_input_child_error_prevents_participant_creation() {
     #[scope]
     async fn image(created: &Cell<bool>) -> Outcome {
-        #[concurrent]
         for _ in (async {
             async {
                 yield_once().await;
@@ -1072,7 +1095,9 @@ fn declaration_array_input_child_error_prevents_participant_creation() {
         })
         .await?
         {
-            created.set(true);
+            async move {
+                created.set(true);
+            };
         }
         panic!("failed array input must not run its continuation")
     }
@@ -1085,7 +1110,6 @@ fn declaration_array_input_child_error_prevents_participant_creation() {
 fn declaration_array_input_can_return_borrows_updated_by_its_children() {
     #[scope]
     async fn image(values: &[Cell<u8>; 2]) -> Outcome {
-        #[concurrent]
         for value in (async {
             async {
                 yield_once().await;
@@ -1096,7 +1120,9 @@ fn declaration_array_input_can_return_borrows_updated_by_its_children() {
         })
         .await?
         {
-            value.set(value.get() + 1);
+            async move {
+                value.set(value.get() + 1);
+            };
         }
         Ok(())
     }
@@ -1118,13 +1144,14 @@ fn an_array_child_failure_drops_even_unpolled_owned_inputs_once() {
     }
     #[scope]
     async fn image(values: [Input; 3]) -> Outcome {
-        #[concurrent]
         for value in values {
-            let owned = value;
-            if owned.index == 0 {
-                return Err("child failed");
-            }
-            core::future::pending::<()>().await;
+            async move {
+                let owned = value;
+                if owned.index == 0 {
+                    return Err("child failed");
+                }
+                core::future::pending::<()>().await;
+            };
         }
         Ok(())
     }

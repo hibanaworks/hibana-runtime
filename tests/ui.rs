@@ -27,14 +27,14 @@ fn compiler_checks_exclusive_views_moves_and_scoped_borrows() -> std::io::Result
         ("named_moved_future", Some("E0382")),
         (
             "plain_block_is_not_an_async_boundary",
-            Some("concurrent declarations belong to an async body; ordinary blocks never wait"),
+            Some("async children belong to an async body; ordinary blocks never wait"),
         ),
         ("elided_input_lifetime_cannot_escape", Some("E0597")),
         ("unused_input_lifetime_cannot_escape", Some("E0597")),
         ("role_mismatch", Some("E0308")),
         (
-            "marker_arguments",
-            Some("a concurrent declaration takes no arguments"),
+            "array_loop_label",
+            Some("an array of async children has no loop control-flow label"),
         ),
     ];
     for (name, expected) in cases {

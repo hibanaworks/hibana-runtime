@@ -4,8 +4,9 @@
 #[hibana_runtime::scope]
 async fn example() -> Result<(), ()> {
     let work = async { Ok::<_, ()>(7) };
-    #[concurrent]
-    let (_first, _second) = (work, work);
+
+let (_first, _second) = (async { async { (work).await };
+async { (work).await }; }).await?;
     Ok(())
 }
 

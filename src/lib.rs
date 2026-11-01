@@ -1,10 +1,11 @@
 //! Localsides declare work; their async bodies own its execution.
 //!
-//! In an attributed async function, `#[concurrent] worker(...);` declares a
-//! named localside directly. Standalone `async { ... };` statements declare
-//! inline localsides. They run concurrently with the rest of their async body and
-//! finish before that future returns. Ordinary blocks never wait. An explicit
-//! `.await` is the completion boundary for a nested async body.
+//! In a `#[scope]` async function, standalone `async { ... };` statements
+//! declare children. They run concurrently with the rest of their async body.
+//! Successful return waits for the children; errors cancel unfinished work.
+//! A body ending with children returns their successful values in declaration
+//! order. An explicit parent value keeps that value instead.
+//! Ordinary blocks never wait. An explicit `.await` completes a nested async body.
 //! Hibana remains the only owner of protocol progress and endpoint authority.
 //!
 //! ```
@@ -191,7 +192,7 @@ impl<L: core::future::Future, R: core::future::Future<Output = L::Output>> core:
 pub mod __private {
     pub use crate::executor::placed_rows;
     pub use crate::executor::{Leaf, Pair, Runtime};
-    pub use crate::inputs::{input_rows, input_slots, take_values};
+    pub use crate::inputs::{empty_values, input_rows, take_values};
 
     /// Borrow a future's final inline slot, dropping it in place on completion
     /// or cancellation. Storage construction moves only this reference.

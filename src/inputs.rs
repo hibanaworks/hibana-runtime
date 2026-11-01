@@ -39,11 +39,16 @@ where
 /// enclosing declaration drives its inputs. No result receiver is created.
 pub trait Values {
     type Value;
+    fn empty() -> Self;
     fn take(self) -> Self::Value;
 }
 
 impl<T> Values for Option<T> {
     type Value = T;
+
+    fn empty() -> Self {
+        None
+    }
 
     fn take(self) -> T {
         self.expect("a completed input produced its value")
@@ -53,18 +58,21 @@ impl<T> Values for Option<T> {
 impl<S: Values, const N: usize> Values for [S; N] {
     type Value = [S::Value; N];
 
+    fn empty() -> Self {
+        core::array::from_fn(|_| S::empty())
+    }
+
     fn take(self) -> Self::Value {
         self.map(Values::take)
     }
 }
 
 /// Shape is inferred: a single future uses (), and a fixed array recursively
-/// uses [Shape; N]. Tuple patterns are handled by Rust destructuring in the macro.
+/// uses [Shape; N].
 pub trait Inputs<'a, Shape>: Sized {
     type Slots: Values + 'a;
     type Rows;
 
-    fn slots(&self) -> Self::Slots;
     fn rows(self, slots: &'a mut Self::Slots) -> Self::Rows;
 }
 
@@ -74,10 +82,6 @@ where
 {
     type Slots = Option<T>;
     type Rows = Leaf<StoreResult<'a, F, T>>;
-
-    fn slots(&self) -> Self::Slots {
-        None
-    }
 
     fn rows(self, output: &'a mut Self::Slots) -> Self::Rows {
         Leaf {
@@ -96,18 +100,14 @@ where
     type Slots = [I::Slots; N];
     type Rows = [I::Rows; N];
 
-    fn slots(&self) -> Self::Slots {
-        core::array::from_fn(|index| self[index].slots())
-    }
-
     fn rows(self, slots: &'a mut Self::Slots) -> Self::Rows {
         let mut outputs = slots.iter_mut();
         self.map(|input| input.rows(outputs.next().expect("one output slot per input")))
     }
 }
 
-pub fn input_slots<'a, I: Inputs<'a, Shape>, Shape>(input: &I) -> I::Slots {
-    input.slots()
+pub fn empty_values<S: Values>() -> S {
+    S::empty()
 }
 
 pub fn input_rows<'a, I: Inputs<'a, Shape>, Shape>(input: I, slots: &'a mut I::Slots) -> I::Rows {

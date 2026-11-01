@@ -39,10 +39,9 @@ mod embedded {
 
     #[hibana_runtime::scope]
     async fn workload(request_steps: u32, audit_steps: u32) -> Result<(), Infallible> {
-        #[concurrent]
-        Work(core::hint::black_box(request_steps));
-        #[concurrent]
-        Work(core::hint::black_box(audit_steps));
+        async { (Work(core::hint::black_box(request_steps))).await };
+
+        async { (Work(core::hint::black_box(audit_steps))).await };
         Ok(())
     }
 

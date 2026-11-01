@@ -6,10 +6,10 @@ const SERVER: u8 = 1;
 #[hibana_runtime::scope]
 async fn example() -> Result<(), ()> {
     let future = async { Ok::<(), ()>(()) };
-    #[concurrent]
-    future;
-    #[concurrent]
-    future;
+
+async { (future).await };
+
+async { (future).await };
     Ok(())
 }
 

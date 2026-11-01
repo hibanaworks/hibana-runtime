@@ -19,55 +19,36 @@ join trees, task/result tables, duplicate completion checks, application
 schedulers or conversion wrappers. Fix this runtime when direct localside code
 needs an adapter. I/O participants own their data and final I/O; the runtime
 owns polling, cancellation and waiting for children.
-Do not make a per-branch `#[concurrent]` or `let ()` list the standard consumer
-style. Inline concurrent work uses one function attribute and direct
-`async { ... };` bodies containing the actual Endpoint operations. Bind needed
-parallel results together; keep branch registration, result storage, pinning and
-child completion inside the runtime. Retain explicit boundaries needed to consume
-results or release borrows; do not add async adapters or scopes merely to conceal management code.
-An ordinary `async { ... }.await?` is a valid completion and borrowing boundary.
-A one-call async child is valid when it directly expresses independent work.
-Do not invent syntax or duplicate execution APIs just to remove these Rust forms.
-`#[hibana_runtime::scope]` marks an async scope. Inside it, `#[concurrent]`
-registers an existing future or fixed array; standalone `async { ... };`
-declares an inline child without an attribute on each branch.
-Result declarations concurrently await exactly their explicit inputs and bind
-ordinary successful values before continuing. Use the input pattern to destructure
-tuples from literals, variables, functions, if or match; a single future returning
-a tuple takes one input name. Fixed arrays derive their storage from their actual
-shape. Do not add tuple-arity tables, result receivers, per-result wakers, task
-handles or completion mailboxes. Release future storage and its input borrows
-before the declaration's continuation; returned values keep their own borrows.
-Child errors propagate once and cancel unfinished work. Stored ordinary futures
-stay lazy, independent of whether an initializer is an async literal.
-Keep attributes off ordinary inline branches. Reuse Hibana's Endpoint/par and
-write each complete receive/compute/send flow inside its branch. Add an explicit
-result declaration only where Rust values really merge. Do not turn each Endpoint
-operation into a task or introduce another communication/result-delivery layer.
+Use one function attribute, `#[hibana_runtime::scope]`, and ordinary Rust async
+and await. Write each independent branch directly as `async { ... };`, including
+a one-call branch. Do not add declaration attributes, task handles, result
+receivers, per-result wakers, join trees or tuple-only await syntax.
 
-Use one function attribute, `#[hibana_runtime::scope]`, with Rust async/await
-as the basic interface. Inside that function, write independent branches directly:
+Hibana's global and Endpoint::par determine protocol independence and joins.
+The runtime polls the entire async child, including computation after its final
+Endpoint operation. Dropping a fragment does not await its Rust computation.
+
+An async body ending in child declarations returns their successful values:
+one child returns its value; several return a tuple in declaration order. A
+fixed-array loop containing one async child returns an array of the actual N.
+Explicit parent success returns its own value after finishing registered
+children. Parent effects between declarations do not regroup child results.
+Errors and cancellation destroy unfinished futures in place and drop completed
+values once. Stored futures remain lazy; ordinary loops remain sequential.
+Use an async expression with `.await?` when values merge or borrows must end:
 
 ```rust
-async {
+let values = async {
     let [mut a, mut b] = endpoint.par()?;
-
-    async { a.send::<First>(&first).await?; };
-    async { b.send::<Second>(&second).await?; };
-
-    Ok(())
+    async { a.recv::<First>().await };
+    async { b.recv::<Second>().await };
 }.await?;
 ```
 
-The runtime drives these children concurrently and finishes them before the outer
-await completes. A single-call async child is valid. Keep Endpoint operations
-visible; the runtime owns pinning, task handles, join construction and child
-completion. Keep the existing declaration grammar; do not add custom concurrency
-syntax to replace these Rust forms.
-
-Declare repeated participants from their actual fixed arrays. Do not make
-consumers construct task collections, spawn handles, polling loops or result
-collection loops. Ordinary unmarked Rust loops keep their sequential meaning.
+The same async scope is an ordinary Future when stored or returned. Fixed arrays
+use `for value in values { async move { ... }; }` inside that scope; do not
+require task collections, spawn handles or result collection loops. Closures,
+nested functions and ordinary blocks do not acquire an implicit async boundary.
 
 Application localsides must not need `pin!`, `Box::pin`, `Pin` arguments or
 manual stack-size configuration. Keep each declared future in one final inline

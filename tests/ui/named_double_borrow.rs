@@ -9,10 +9,10 @@ async fn send(endpoint: &mut hibana::Endpoint<CLIENT>) -> Result<(), hibana::End
 }
 #[hibana_runtime::scope]
 async fn example(mut a: hibana::Endpoint<CLIENT>) -> Result<(), hibana::EndpointError> {
-    #[concurrent]
-    send(&mut a);
-    #[concurrent]
-    send(&mut a);
+
+async { (send(&mut a)).await };
+
+async { (send(&mut a)).await };
     Ok(())
 }
 

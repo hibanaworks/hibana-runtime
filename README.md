@@ -31,10 +31,11 @@ spawn handles, result collection loop or heap allocation.
 ```rust
 #[hibana_runtime::scope]
 async fn image(outputs: [&core::cell::Cell<u8>; 3]) -> Result<(), core::convert::Infallible> {
-    #[concurrent]
     for output in outputs {
-        hibana_runtime::yield_now().await;
-        output.set(7);
+        async move {
+            hibana_runtime::yield_now().await;
+            output.set(7);
+        };
     }
     Ok(())
 }
@@ -99,10 +100,8 @@ async fn image(
     (server, store): (Endpoint<SERVER>, Endpoint<STORE>),
     events: Events,
 ) -> Result<(), EndpointError> {
-    #[concurrent]
-    sides::server(server);
-    #[concurrent]
-    sides::store(store);
+    async { sides::server(server).await?; };
+    async { sides::store(store).await?; };
     Ok(())
 }
 ```
@@ -116,112 +115,80 @@ Endpoint pointer crosses the socket.
 
 ## Async bodies own execution
 
-Within an attributed function, `#[concurrent] future_expression;` registers an
-existing future directly. Calls, methods, future variables, and future-valued
-macros need no `async { ...await }` wrapper. A standalone `async { ... };`
-declares an inline localside when writing its operations in place.
-
-A declaration runs concurrently with the rest of its **async body**. The future
-finishes its children before successfully returning. Constructors and arguments
-execute at their source position; declarations are not hoisted over effects or
-awaits. Localside signatures use role names, such as `Endpoint<CLIENT>`, without
-lifetime placeholders. The attribute lowers the function to an ordinary Rust 2024
-function returning a future; Rust captures the elided input lifetimes. Argument
-ownership and lazy parameter destructuring retain async-function behavior.
-
-Children may borrow caller-owned data and need not be `Send`, `'static`,
-or `Unpin`.
-
-Keep each Endpoint's receive, computation and send in its own inline async body.
-Hibana's `par()` supplies the independent fragments; the runtime drives those
-bodies without another protocol cursor or result channel. Branches need no
-individual attributes.
-
-When later code needs several Rust values together, one declaration waits for
-those inputs concurrently, releases their future storage, and binds the values:
-
-```rust
-#[concurrent]
-let (first, second) = (
-    first_endpoint.recv::<First>(),
-    second_endpoint.recv::<Second>(),
-);
-use_results(first, second);
-```
-
-The declaration waits only for its own inputs. Other scoped children continue
-alongside it and its continuation. An input error cancels unfinished inputs and
-propagates once through the enclosing async body. The continuation does not run.
-Successful values have ordinary Rust ownership and drop behavior.
-
-The pattern describes the input futures, so a variable or function returning a
-tuple works in the same position:
-
-```rust
-let pending = make_futures();
-#[concurrent]
-let (first, second) = pending;
-```
-
-Tuple length comes from that pattern, with no tuple-arity trait table. A single
-future returning a tuple takes one name: `#[concurrent] let pair = future;`, then
-`let (first, second) = pair;`. Fixed arrays, including nested arrays, produce
-values of the same shape:
-
-```rust
-#[concurrent]
-let replies = views.map(|mut view| async move {
-    view.recv::<Reply>().await
-});
-// replies is [ReplyValue; N], ready to use.
-```
-
-Array patterns can bind individual completed values. Array elements retain Rust's
-requirement to have one concrete type; tuple inputs may have different types.
-Input expressions execute once at their source positions. Ordinary stored futures
-remain lazy until awaited or explicitly declared as concurrent work.
-
-Future storage ends before the declaration's continuation, releasing input
-borrows. Returned values may keep their own borrows of caller data. There are no
-result receivers, extra result wakers or completion flags. To wait for either of
-two futures, `race(left, right).await` drops the unfinished future when one
-completes. Each future retains its normal cancellation contract.
-
-Ordinary `{}` blocks do not introduce waiting, joining, or async destruction.
-Registrations belong directly to an async body. For a nested phase, an ordinary
-async expression gives the lifetime boundary and an explicit `.await` completes
-it. For example, after receiving two owned views:
+Inside a `#[hibana_runtime::scope]` function, a standalone `async { ... };`
+declares a child. Its complete receive/compute/send flow stays visible:
 
 ```rust
 async {
+    let [mut a, mut b] = endpoint.par()?;
     async {
-        db.send::<Read>(&42).await?;
-        record_value(db.recv::<Value>().await?);
+        let request = a.recv::<Request>().await?;
+        let answer = calculate(request);
+        a.send::<Answer>(&answer).await?;
     };
-    async {
-        auth.send::<Check>(&7).await?;
-        record_permission(auth.recv::<Allowed>().await?);
-    };
+    async { b.send::<Status>(&status).await?; };
     Ok(())
 }.await?;
-worker.send::<Loan>(db).await?;
-worker.send::<AuthLoan>(auth).await?;
 ```
 
-The await releases the children's borrows before returning the views. A stored
-async value does not run until polled. Conditions and loops use ordinary Rust;
-an async body inside them can contain its own declarations. Sequential code is
-not automatically split into independent computations. Closures and nested
-functions retain their own boundary; a nested function can use its own attribute.
+Children run concurrently with the remainder of their async body. Successful
+return finishes registered children, including computation after their final
+Endpoint operation. Errors cancel unfinished futures in place. `par()` supplies
+the protocol fragments; the runtime polls their Rust computations.
 
-Functions return `Result<T, E>`, including aliases. Inline child bodies with no
-explicit tail infer `Ok(())`. A child error, a parent `?`/returned error, or dropping
-the unfinished enclosing future cancels unfinished local children in place.
-Early successful returns finish the children. Loop labels, break values, and
-returns use Rust's existing async boundaries; there is no synthetic exit enum or
-rewriting of ordinary block/loop exits. An error never rolls back accepted
-communication or delegated ownership. Remote failure observation belongs to the
-carrier; local cancellation is not an instantaneous distributed rollback.
+A body ending in child declarations returns their successful values. One child
+returns its value, several return a tuple in declaration order:
+
+```rust
+let (first, second) = async {
+    async { first_endpoint.recv::<First>().await };
+    async { second_endpoint.recv::<Second>().await };
+}.await?;
+use_results(first, second);
+```
+
+The async expression is an ordinary Future: it can also be stored in a variable
+or returned by a function. Its children may return different types or borrow
+caller-owned data. An explicit parent `Ok(value)` or early successful return
+keeps that value instead, after finishing children already declared. Parent
+effects between child declarations preserve declaration order in the results.
+
+A fixed-array loop containing one async child declares an array of children.
+It returns an array of successful values with the same length; nested arrays
+keep their shape:
+
+```rust
+let replies = async {
+    for mut view in views {
+        async move { view.recv::<Reply>().await };
+    }
+}.await?;
+// replies is [ReplyValue; N].
+```
+
+Array length supplies the storage size. No declaration attribute, result handle,
+or tuple-arity table is required. Ordinary loops with no async child remain
+sequential. Future variables stay lazy until driven; constructors inside a child
+run when that child is polled. Construct input futures before declaring the
+children when their constructors must run first.
+
+The await boundary releases future storage and input borrows before its caller
+continues. Returned values keep their own borrows. To wait for either of two
+futures, `race(left, right).await` drops the unfinished future when one completes.
+Cancellation follows each future's contract and never restores delegated rights
+or rolls back accepted I/O.
+
+Ordinary `{}` blocks do not await their children. Declarations belong directly
+to an async body. Conditions and loops can await their own async scopes, while
+closures and nested functions retain their Rust boundaries. Scope functions
+return `Result<T, E>`, including aliases; a unit-valued child body infers
+`Ok(())`. Return, error, loop-label and drop behavior is preserved when an
+immediately awaited scope can use its caller's storage directly.
+
+The function attribute lowers the signature to an ordinary Rust 2024 function
+returning a Future. Localsides can write `Endpoint<CLIENT>` with elided input
+lifetimes. The future retains argument ownership and lazy pattern destructuring.
+Children need not be `Send`, `'static` or `Unpin`.
 
 ## Global, projection, placement
 

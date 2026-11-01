@@ -38,8 +38,13 @@ fn a_variable_tuple_drives_both_inputs_before_returning_values() {
                 Ok::<_, ()>(true)
             },
         );
-        #[concurrent]
-        let (first, second) = inputs;
+
+        let (first, second) = (async {
+            let (input0, input1) = inputs;
+            async { input0.await };
+            async { input1.await };
+        })
+        .await?;
         assert_eq!(started.get(), 3);
         Ok((first, second))
     }
@@ -50,11 +55,11 @@ fn a_variable_tuple_drives_both_inputs_before_returning_values() {
 fn one_future_returning_a_tuple_is_one_declared_child() {
     #[scope]
     async fn program() -> Result<(u32, bool), ()> {
-        #[concurrent]
-        let pair = async {
+        let pair = (async {
             hibana_runtime::yield_now().await;
             Ok((7, true))
-        };
+        })
+        .await?;
         let (number, enabled) = pair;
         Ok((number, enabled))
     }
@@ -66,13 +71,33 @@ fn arrays_and_nested_arrays_preserve_their_actual_shape() {
     #[scope]
     async fn program() -> Result<([u32; 3], [[u32; 2]; 2], [u32; 0]), ()> {
         let input = [1, 2, 3].map(|value| async move { Ok::<_, ()>(value * 2) });
-        #[concurrent]
-        let values = input;
-        #[concurrent]
-        let nested =
-            [[1, 2], [3, 4]].map(|row| row.map(|value| core::future::ready(Ok::<_, ()>(value))));
-        #[concurrent]
-        let empty = [] as [core::future::Ready<Result<u32, ()>>; 0];
+
+        let values = async {
+            for input in input {
+                async move { input.await };
+            }
+        }
+        .await?;
+
+        let nested = async {
+            for row in
+                [[1, 2], [3, 4]].map(|row| row.map(|value| core::future::ready(Ok::<_, ()>(value))))
+            {
+                async move {
+                    for input in row {
+                        async move { input.await };
+                    }
+                };
+            }
+        }
+        .await?;
+
+        let empty = async {
+            for input in [] as [core::future::Ready<Result<u32, ()>>; 0] {
+                async move { input.await };
+            }
+        }
+        .await?;
         Ok((values, nested, empty))
     }
     assert_eq!(run(program()), Ok(([2, 4, 6], [[1, 2], [3, 4]], [])));
@@ -85,8 +110,11 @@ fn result_values_can_keep_mutable_borrows_of_the_callers_data() {
         left: &'a mut u32,
         right: &'a mut bool,
     ) -> Result<(&'a mut u32, &'a mut bool), ()> {
-        #[concurrent]
-        let (first, second) = (async { Ok(left) }, async { Ok(right) });
+        let (first, second) = (async {
+            async { Ok(left) };
+            async { Ok(right) };
+        })
+        .await?;
         Ok((first, second))
     }
     let (mut left, mut right) = (7, false);
@@ -103,11 +131,11 @@ fn a_non_clone_child_error_stops_the_declaration_before_its_continuation() {
 
     #[scope]
     async fn program(after: &Cell<bool>) -> Result<(), Error> {
-        #[concurrent]
-        let _failed = async {
+        let _failed = (async {
             hibana_runtime::yield_now().await;
             Err::<u32, _>(Error(7))
-        };
+        })
+        .await?;
         after.set(true);
         Ok(())
     }
@@ -159,17 +187,26 @@ fn function_if_and_match_inputs_are_evaluated_once_at_the_declaration() {
 
     #[scope]
     async fn program(calls: &Cell<u32>, select: bool) -> Result<(), ()> {
-        #[concurrent]
-        let (a, b) = if select {
-            inputs(calls, 7)
-        } else {
-            inputs(calls, 8)
-        };
-        #[concurrent]
-        let (c, d) = match select {
-            true => inputs(calls, 9),
-            false => inputs(calls, 10),
-        };
+        let (a, b) = (async {
+            let (input0, input1) = if select {
+                inputs(calls, 7)
+            } else {
+                inputs(calls, 8)
+            };
+            async { input0.await };
+            async { input1.await };
+        })
+        .await?;
+
+        let (c, d) = (async {
+            let (input0, input1) = match select {
+                true => inputs(calls, 9),
+                false => inputs(calls, 10),
+            };
+            async { input0.await };
+            async { input1.await };
+        })
+        .await?;
         assert_eq!(
             (a, b, c, d),
             if select {
@@ -192,8 +229,13 @@ fn array_patterns_bind_the_completed_values() {
     #[scope]
     async fn program() -> Result<(u32, u32), ()> {
         let input = [7, 8].map(|value| core::future::ready(Ok::<_, ()>(value)));
-        #[concurrent]
-        let [first, second] = input;
+
+        let [first, second] = (async {
+            for input in input {
+                async move { input.await };
+            }
+        })
+        .await?;
         Ok((first, second))
     }
     assert_eq!(run(program()), Ok((7, 8)));
@@ -203,26 +245,26 @@ fn array_patterns_bind_the_completed_values() {
 fn tuple_declarations_do_not_use_a_fixed_trait_arity_table() {
     #[scope]
     async fn program() -> Result<[u8; 17], ()> {
-        #[concurrent]
-        let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q) = (
-            async { Ok(0) },
-            async { Ok(1) },
-            async { Ok(2) },
-            async { Ok(3) },
-            async { Ok(4) },
-            async { Ok(5) },
-            async { Ok(6) },
-            async { Ok(7) },
-            async { Ok(8) },
-            async { Ok(9) },
-            async { Ok(10) },
-            async { Ok(11) },
-            async { Ok(12) },
-            async { Ok(13) },
-            async { Ok(14) },
-            async { Ok(15) },
-            async { Ok(16) },
-        );
+        let (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q) = (async {
+            async { Ok(0) };
+            async { Ok(1) };
+            async { Ok(2) };
+            async { Ok(3) };
+            async { Ok(4) };
+            async { Ok(5) };
+            async { Ok(6) };
+            async { Ok(7) };
+            async { Ok(8) };
+            async { Ok(9) };
+            async { Ok(10) };
+            async { Ok(11) };
+            async { Ok(12) };
+            async { Ok(13) };
+            async { Ok(14) };
+            async { Ok(15) };
+            async { Ok(16) };
+        })
+        .await?;
         Ok([a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q])
     }
     assert_eq!(
@@ -242,12 +284,12 @@ fn joined_values_have_ordinary_rust_drop_semantics() {
 
     #[scope]
     async fn program(finished: &Cell<bool>, drops: &Cell<u32>) -> Result<(), ()> {
-        #[concurrent]
-        let value = async {
+        let value = (async {
             hibana_runtime::yield_now().await;
             finished.set(true);
             Ok(Value(drops))
-        };
+        })
+        .await?;
         assert!(finished.get());
         assert_eq!(drops.get(), 0);
         drop(value);
@@ -270,11 +312,14 @@ fn an_input_error_drops_a_siblings_completed_value_once() {
     }
     #[scope]
     async fn program(drops: &Cell<u32>) -> Result<(), ()> {
-        #[concurrent]
-        let (_value, _failed) = (async { Ok(Value(drops)) }, async {
-            hibana_runtime::yield_now().await;
-            Err::<(), _>(())
-        });
+        let (_value, _failed) = (async {
+            async { Ok(Value(drops)) };
+            async {
+                hibana_runtime::yield_now().await;
+                Err::<(), _>(())
+            };
+        })
+        .await?;
         panic!("failed inputs must not reach their continuation")
     }
     let drops = Cell::new(0);
@@ -290,8 +335,7 @@ fn successful_result_values_are_not_structurally_pinned() {
     }
     #[scope]
     async fn program<'a>(value: &'a mut u32) -> Result<Value<'a>, ()> {
-        #[concurrent]
-        let result = async {
+        let result = (async {
             let scratch = [7_u8; 64];
             let borrowed = &scratch;
             hibana_runtime::yield_now().await;
@@ -300,7 +344,8 @@ fn successful_result_values_are_not_structurally_pinned() {
                 value,
                 _pin: core::marker::PhantomPinned,
             })
-        };
+        })
+        .await?;
         Ok(result)
     }
     let mut number = 1;

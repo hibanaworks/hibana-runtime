@@ -14,518 +14,517 @@ async fn task<const SLOT: usize>(completed: &Cell<usize>) -> Result<(), Infallib
 async fn main() -> Result<(), Infallible> {
     let completed = Cell::new(0);
     async {
-        #[concurrent]
-        task::<0>(&completed);
-        #[concurrent]
-        task::<1>(&completed);
-        #[concurrent]
-        task::<2>(&completed);
-        #[concurrent]
-        task::<3>(&completed);
-        #[concurrent]
-        task::<4>(&completed);
-        #[concurrent]
-        task::<5>(&completed);
-        #[concurrent]
-        task::<6>(&completed);
-        #[concurrent]
-        task::<7>(&completed);
-        #[concurrent]
-        task::<8>(&completed);
-        #[concurrent]
-        task::<9>(&completed);
-        #[concurrent]
-        task::<10>(&completed);
-        #[concurrent]
-        task::<11>(&completed);
-        #[concurrent]
-        task::<12>(&completed);
-        #[concurrent]
-        task::<13>(&completed);
-        #[concurrent]
-        task::<14>(&completed);
-        #[concurrent]
-        task::<15>(&completed);
-        #[concurrent]
-        task::<16>(&completed);
-        #[concurrent]
-        task::<17>(&completed);
-        #[concurrent]
-        task::<18>(&completed);
-        #[concurrent]
-        task::<19>(&completed);
-        #[concurrent]
-        task::<20>(&completed);
-        #[concurrent]
-        task::<21>(&completed);
-        #[concurrent]
-        task::<22>(&completed);
-        #[concurrent]
-        task::<23>(&completed);
-        #[concurrent]
-        task::<24>(&completed);
-        #[concurrent]
-        task::<25>(&completed);
-        #[concurrent]
-        task::<26>(&completed);
-        #[concurrent]
-        task::<27>(&completed);
-        #[concurrent]
-        task::<28>(&completed);
-        #[concurrent]
-        task::<29>(&completed);
-        #[concurrent]
-        task::<30>(&completed);
-        #[concurrent]
-        task::<31>(&completed);
-        #[concurrent]
-        task::<32>(&completed);
-        #[concurrent]
-        task::<33>(&completed);
-        #[concurrent]
-        task::<34>(&completed);
-        #[concurrent]
-        task::<35>(&completed);
-        #[concurrent]
-        task::<36>(&completed);
-        #[concurrent]
-        task::<37>(&completed);
-        #[concurrent]
-        task::<38>(&completed);
-        #[concurrent]
-        task::<39>(&completed);
-        #[concurrent]
-        task::<40>(&completed);
-        #[concurrent]
-        task::<41>(&completed);
-        #[concurrent]
-        task::<42>(&completed);
-        #[concurrent]
-        task::<43>(&completed);
-        #[concurrent]
-        task::<44>(&completed);
-        #[concurrent]
-        task::<45>(&completed);
-        #[concurrent]
-        task::<46>(&completed);
-        #[concurrent]
-        task::<47>(&completed);
-        #[concurrent]
-        task::<48>(&completed);
-        #[concurrent]
-        task::<49>(&completed);
-        #[concurrent]
-        task::<50>(&completed);
-        #[concurrent]
-        task::<51>(&completed);
-        #[concurrent]
-        task::<52>(&completed);
-        #[concurrent]
-        task::<53>(&completed);
-        #[concurrent]
-        task::<54>(&completed);
-        #[concurrent]
-        task::<55>(&completed);
-        #[concurrent]
-        task::<56>(&completed);
-        #[concurrent]
-        task::<57>(&completed);
-        #[concurrent]
-        task::<58>(&completed);
-        #[concurrent]
-        task::<59>(&completed);
-        #[concurrent]
-        task::<60>(&completed);
-        #[concurrent]
-        task::<61>(&completed);
-        #[concurrent]
-        task::<62>(&completed);
-        #[concurrent]
-        task::<63>(&completed);
-        #[concurrent]
-        task::<64>(&completed);
-        #[concurrent]
-        task::<65>(&completed);
-        #[concurrent]
-        task::<66>(&completed);
-        #[concurrent]
-        task::<67>(&completed);
-        #[concurrent]
-        task::<68>(&completed);
-        #[concurrent]
-        task::<69>(&completed);
-        #[concurrent]
-        task::<70>(&completed);
-        #[concurrent]
-        task::<71>(&completed);
-        #[concurrent]
-        task::<72>(&completed);
-        #[concurrent]
-        task::<73>(&completed);
-        #[concurrent]
-        task::<74>(&completed);
-        #[concurrent]
-        task::<75>(&completed);
-        #[concurrent]
-        task::<76>(&completed);
-        #[concurrent]
-        task::<77>(&completed);
-        #[concurrent]
-        task::<78>(&completed);
-        #[concurrent]
-        task::<79>(&completed);
-        #[concurrent]
-        task::<80>(&completed);
-        #[concurrent]
-        task::<81>(&completed);
-        #[concurrent]
-        task::<82>(&completed);
-        #[concurrent]
-        task::<83>(&completed);
-        #[concurrent]
-        task::<84>(&completed);
-        #[concurrent]
-        task::<85>(&completed);
-        #[concurrent]
-        task::<86>(&completed);
-        #[concurrent]
-        task::<87>(&completed);
-        #[concurrent]
-        task::<88>(&completed);
-        #[concurrent]
-        task::<89>(&completed);
-        #[concurrent]
-        task::<90>(&completed);
-        #[concurrent]
-        task::<91>(&completed);
-        #[concurrent]
-        task::<92>(&completed);
-        #[concurrent]
-        task::<93>(&completed);
-        #[concurrent]
-        task::<94>(&completed);
-        #[concurrent]
-        task::<95>(&completed);
-        #[concurrent]
-        task::<96>(&completed);
-        #[concurrent]
-        task::<97>(&completed);
-        #[concurrent]
-        task::<98>(&completed);
-        #[concurrent]
-        task::<99>(&completed);
-        #[concurrent]
-        task::<100>(&completed);
-        #[concurrent]
-        task::<101>(&completed);
-        #[concurrent]
-        task::<102>(&completed);
-        #[concurrent]
-        task::<103>(&completed);
-        #[concurrent]
-        task::<104>(&completed);
-        #[concurrent]
-        task::<105>(&completed);
-        #[concurrent]
-        task::<106>(&completed);
-        #[concurrent]
-        task::<107>(&completed);
-        #[concurrent]
-        task::<108>(&completed);
-        #[concurrent]
-        task::<109>(&completed);
-        #[concurrent]
-        task::<110>(&completed);
-        #[concurrent]
-        task::<111>(&completed);
-        #[concurrent]
-        task::<112>(&completed);
-        #[concurrent]
-        task::<113>(&completed);
-        #[concurrent]
-        task::<114>(&completed);
-        #[concurrent]
-        task::<115>(&completed);
-        #[concurrent]
-        task::<116>(&completed);
-        #[concurrent]
-        task::<117>(&completed);
-        #[concurrent]
-        task::<118>(&completed);
-        #[concurrent]
-        task::<119>(&completed);
-        #[concurrent]
-        task::<120>(&completed);
-        #[concurrent]
-        task::<121>(&completed);
-        #[concurrent]
-        task::<122>(&completed);
-        #[concurrent]
-        task::<123>(&completed);
-        #[concurrent]
-        task::<124>(&completed);
-        #[concurrent]
-        task::<125>(&completed);
-        #[concurrent]
-        task::<126>(&completed);
-        #[concurrent]
-        task::<127>(&completed);
-        #[concurrent]
-        task::<128>(&completed);
-        #[concurrent]
-        task::<129>(&completed);
-        #[concurrent]
-        task::<130>(&completed);
-        #[concurrent]
-        task::<131>(&completed);
-        #[concurrent]
-        task::<132>(&completed);
-        #[concurrent]
-        task::<133>(&completed);
-        #[concurrent]
-        task::<134>(&completed);
-        #[concurrent]
-        task::<135>(&completed);
-        #[concurrent]
-        task::<136>(&completed);
-        #[concurrent]
-        task::<137>(&completed);
-        #[concurrent]
-        task::<138>(&completed);
-        #[concurrent]
-        task::<139>(&completed);
-        #[concurrent]
-        task::<140>(&completed);
-        #[concurrent]
-        task::<141>(&completed);
-        #[concurrent]
-        task::<142>(&completed);
-        #[concurrent]
-        task::<143>(&completed);
-        #[concurrent]
-        task::<144>(&completed);
-        #[concurrent]
-        task::<145>(&completed);
-        #[concurrent]
-        task::<146>(&completed);
-        #[concurrent]
-        task::<147>(&completed);
-        #[concurrent]
-        task::<148>(&completed);
-        #[concurrent]
-        task::<149>(&completed);
-        #[concurrent]
-        task::<150>(&completed);
-        #[concurrent]
-        task::<151>(&completed);
-        #[concurrent]
-        task::<152>(&completed);
-        #[concurrent]
-        task::<153>(&completed);
-        #[concurrent]
-        task::<154>(&completed);
-        #[concurrent]
-        task::<155>(&completed);
-        #[concurrent]
-        task::<156>(&completed);
-        #[concurrent]
-        task::<157>(&completed);
-        #[concurrent]
-        task::<158>(&completed);
-        #[concurrent]
-        task::<159>(&completed);
-        #[concurrent]
-        task::<160>(&completed);
-        #[concurrent]
-        task::<161>(&completed);
-        #[concurrent]
-        task::<162>(&completed);
-        #[concurrent]
-        task::<163>(&completed);
-        #[concurrent]
-        task::<164>(&completed);
-        #[concurrent]
-        task::<165>(&completed);
-        #[concurrent]
-        task::<166>(&completed);
-        #[concurrent]
-        task::<167>(&completed);
-        #[concurrent]
-        task::<168>(&completed);
-        #[concurrent]
-        task::<169>(&completed);
-        #[concurrent]
-        task::<170>(&completed);
-        #[concurrent]
-        task::<171>(&completed);
-        #[concurrent]
-        task::<172>(&completed);
-        #[concurrent]
-        task::<173>(&completed);
-        #[concurrent]
-        task::<174>(&completed);
-        #[concurrent]
-        task::<175>(&completed);
-        #[concurrent]
-        task::<176>(&completed);
-        #[concurrent]
-        task::<177>(&completed);
-        #[concurrent]
-        task::<178>(&completed);
-        #[concurrent]
-        task::<179>(&completed);
-        #[concurrent]
-        task::<180>(&completed);
-        #[concurrent]
-        task::<181>(&completed);
-        #[concurrent]
-        task::<182>(&completed);
-        #[concurrent]
-        task::<183>(&completed);
-        #[concurrent]
-        task::<184>(&completed);
-        #[concurrent]
-        task::<185>(&completed);
-        #[concurrent]
-        task::<186>(&completed);
-        #[concurrent]
-        task::<187>(&completed);
-        #[concurrent]
-        task::<188>(&completed);
-        #[concurrent]
-        task::<189>(&completed);
-        #[concurrent]
-        task::<190>(&completed);
-        #[concurrent]
-        task::<191>(&completed);
-        #[concurrent]
-        task::<192>(&completed);
-        #[concurrent]
-        task::<193>(&completed);
-        #[concurrent]
-        task::<194>(&completed);
-        #[concurrent]
-        task::<195>(&completed);
-        #[concurrent]
-        task::<196>(&completed);
-        #[concurrent]
-        task::<197>(&completed);
-        #[concurrent]
-        task::<198>(&completed);
-        #[concurrent]
-        task::<199>(&completed);
-        #[concurrent]
-        task::<200>(&completed);
-        #[concurrent]
-        task::<201>(&completed);
-        #[concurrent]
-        task::<202>(&completed);
-        #[concurrent]
-        task::<203>(&completed);
-        #[concurrent]
-        task::<204>(&completed);
-        #[concurrent]
-        task::<205>(&completed);
-        #[concurrent]
-        task::<206>(&completed);
-        #[concurrent]
-        task::<207>(&completed);
-        #[concurrent]
-        task::<208>(&completed);
-        #[concurrent]
-        task::<209>(&completed);
-        #[concurrent]
-        task::<210>(&completed);
-        #[concurrent]
-        task::<211>(&completed);
-        #[concurrent]
-        task::<212>(&completed);
-        #[concurrent]
-        task::<213>(&completed);
-        #[concurrent]
-        task::<214>(&completed);
-        #[concurrent]
-        task::<215>(&completed);
-        #[concurrent]
-        task::<216>(&completed);
-        #[concurrent]
-        task::<217>(&completed);
-        #[concurrent]
-        task::<218>(&completed);
-        #[concurrent]
-        task::<219>(&completed);
-        #[concurrent]
-        task::<220>(&completed);
-        #[concurrent]
-        task::<221>(&completed);
-        #[concurrent]
-        task::<222>(&completed);
-        #[concurrent]
-        task::<223>(&completed);
-        #[concurrent]
-        task::<224>(&completed);
-        #[concurrent]
-        task::<225>(&completed);
-        #[concurrent]
-        task::<226>(&completed);
-        #[concurrent]
-        task::<227>(&completed);
-        #[concurrent]
-        task::<228>(&completed);
-        #[concurrent]
-        task::<229>(&completed);
-        #[concurrent]
-        task::<230>(&completed);
-        #[concurrent]
-        task::<231>(&completed);
-        #[concurrent]
-        task::<232>(&completed);
-        #[concurrent]
-        task::<233>(&completed);
-        #[concurrent]
-        task::<234>(&completed);
-        #[concurrent]
-        task::<235>(&completed);
-        #[concurrent]
-        task::<236>(&completed);
-        #[concurrent]
-        task::<237>(&completed);
-        #[concurrent]
-        task::<238>(&completed);
-        #[concurrent]
-        task::<239>(&completed);
-        #[concurrent]
-        task::<240>(&completed);
-        #[concurrent]
-        task::<241>(&completed);
-        #[concurrent]
-        task::<242>(&completed);
-        #[concurrent]
-        task::<243>(&completed);
-        #[concurrent]
-        task::<244>(&completed);
-        #[concurrent]
-        task::<245>(&completed);
-        #[concurrent]
-        task::<246>(&completed);
-        #[concurrent]
-        task::<247>(&completed);
-        #[concurrent]
-        task::<248>(&completed);
-        #[concurrent]
-        task::<249>(&completed);
-        #[concurrent]
-        task::<250>(&completed);
-        #[concurrent]
-        task::<251>(&completed);
-        #[concurrent]
-        task::<252>(&completed);
-        #[concurrent]
-        task::<253>(&completed);
-        #[concurrent]
-        task::<254>(&completed);
-        #[concurrent]
-        task::<255>(&completed);
+        async { (task::<0>(&completed)).await };
+
+        async { (task::<1>(&completed)).await };
+
+        async { (task::<2>(&completed)).await };
+
+        async { (task::<3>(&completed)).await };
+
+        async { (task::<4>(&completed)).await };
+
+        async { (task::<5>(&completed)).await };
+
+        async { (task::<6>(&completed)).await };
+
+        async { (task::<7>(&completed)).await };
+
+        async { (task::<8>(&completed)).await };
+
+        async { (task::<9>(&completed)).await };
+
+        async { (task::<10>(&completed)).await };
+
+        async { (task::<11>(&completed)).await };
+
+        async { (task::<12>(&completed)).await };
+
+        async { (task::<13>(&completed)).await };
+
+        async { (task::<14>(&completed)).await };
+
+        async { (task::<15>(&completed)).await };
+
+        async { (task::<16>(&completed)).await };
+
+        async { (task::<17>(&completed)).await };
+
+        async { (task::<18>(&completed)).await };
+
+        async { (task::<19>(&completed)).await };
+
+        async { (task::<20>(&completed)).await };
+
+        async { (task::<21>(&completed)).await };
+
+        async { (task::<22>(&completed)).await };
+
+        async { (task::<23>(&completed)).await };
+
+        async { (task::<24>(&completed)).await };
+
+        async { (task::<25>(&completed)).await };
+
+        async { (task::<26>(&completed)).await };
+
+        async { (task::<27>(&completed)).await };
+
+        async { (task::<28>(&completed)).await };
+
+        async { (task::<29>(&completed)).await };
+
+        async { (task::<30>(&completed)).await };
+
+        async { (task::<31>(&completed)).await };
+
+        async { (task::<32>(&completed)).await };
+
+        async { (task::<33>(&completed)).await };
+
+        async { (task::<34>(&completed)).await };
+
+        async { (task::<35>(&completed)).await };
+
+        async { (task::<36>(&completed)).await };
+
+        async { (task::<37>(&completed)).await };
+
+        async { (task::<38>(&completed)).await };
+
+        async { (task::<39>(&completed)).await };
+
+        async { (task::<40>(&completed)).await };
+
+        async { (task::<41>(&completed)).await };
+
+        async { (task::<42>(&completed)).await };
+
+        async { (task::<43>(&completed)).await };
+
+        async { (task::<44>(&completed)).await };
+
+        async { (task::<45>(&completed)).await };
+
+        async { (task::<46>(&completed)).await };
+
+        async { (task::<47>(&completed)).await };
+
+        async { (task::<48>(&completed)).await };
+
+        async { (task::<49>(&completed)).await };
+
+        async { (task::<50>(&completed)).await };
+
+        async { (task::<51>(&completed)).await };
+
+        async { (task::<52>(&completed)).await };
+
+        async { (task::<53>(&completed)).await };
+
+        async { (task::<54>(&completed)).await };
+
+        async { (task::<55>(&completed)).await };
+
+        async { (task::<56>(&completed)).await };
+
+        async { (task::<57>(&completed)).await };
+
+        async { (task::<58>(&completed)).await };
+
+        async { (task::<59>(&completed)).await };
+
+        async { (task::<60>(&completed)).await };
+
+        async { (task::<61>(&completed)).await };
+
+        async { (task::<62>(&completed)).await };
+
+        async { (task::<63>(&completed)).await };
+
+        async { (task::<64>(&completed)).await };
+
+        async { (task::<65>(&completed)).await };
+
+        async { (task::<66>(&completed)).await };
+
+        async { (task::<67>(&completed)).await };
+
+        async { (task::<68>(&completed)).await };
+
+        async { (task::<69>(&completed)).await };
+
+        async { (task::<70>(&completed)).await };
+
+        async { (task::<71>(&completed)).await };
+
+        async { (task::<72>(&completed)).await };
+
+        async { (task::<73>(&completed)).await };
+
+        async { (task::<74>(&completed)).await };
+
+        async { (task::<75>(&completed)).await };
+
+        async { (task::<76>(&completed)).await };
+
+        async { (task::<77>(&completed)).await };
+
+        async { (task::<78>(&completed)).await };
+
+        async { (task::<79>(&completed)).await };
+
+        async { (task::<80>(&completed)).await };
+
+        async { (task::<81>(&completed)).await };
+
+        async { (task::<82>(&completed)).await };
+
+        async { (task::<83>(&completed)).await };
+
+        async { (task::<84>(&completed)).await };
+
+        async { (task::<85>(&completed)).await };
+
+        async { (task::<86>(&completed)).await };
+
+        async { (task::<87>(&completed)).await };
+
+        async { (task::<88>(&completed)).await };
+
+        async { (task::<89>(&completed)).await };
+
+        async { (task::<90>(&completed)).await };
+
+        async { (task::<91>(&completed)).await };
+
+        async { (task::<92>(&completed)).await };
+
+        async { (task::<93>(&completed)).await };
+
+        async { (task::<94>(&completed)).await };
+
+        async { (task::<95>(&completed)).await };
+
+        async { (task::<96>(&completed)).await };
+
+        async { (task::<97>(&completed)).await };
+
+        async { (task::<98>(&completed)).await };
+
+        async { (task::<99>(&completed)).await };
+
+        async { (task::<100>(&completed)).await };
+
+        async { (task::<101>(&completed)).await };
+
+        async { (task::<102>(&completed)).await };
+
+        async { (task::<103>(&completed)).await };
+
+        async { (task::<104>(&completed)).await };
+
+        async { (task::<105>(&completed)).await };
+
+        async { (task::<106>(&completed)).await };
+
+        async { (task::<107>(&completed)).await };
+
+        async { (task::<108>(&completed)).await };
+
+        async { (task::<109>(&completed)).await };
+
+        async { (task::<110>(&completed)).await };
+
+        async { (task::<111>(&completed)).await };
+
+        async { (task::<112>(&completed)).await };
+
+        async { (task::<113>(&completed)).await };
+
+        async { (task::<114>(&completed)).await };
+
+        async { (task::<115>(&completed)).await };
+
+        async { (task::<116>(&completed)).await };
+
+        async { (task::<117>(&completed)).await };
+
+        async { (task::<118>(&completed)).await };
+
+        async { (task::<119>(&completed)).await };
+
+        async { (task::<120>(&completed)).await };
+
+        async { (task::<121>(&completed)).await };
+
+        async { (task::<122>(&completed)).await };
+
+        async { (task::<123>(&completed)).await };
+
+        async { (task::<124>(&completed)).await };
+
+        async { (task::<125>(&completed)).await };
+
+        async { (task::<126>(&completed)).await };
+
+        async { (task::<127>(&completed)).await };
+
+        async { (task::<128>(&completed)).await };
+
+        async { (task::<129>(&completed)).await };
+
+        async { (task::<130>(&completed)).await };
+
+        async { (task::<131>(&completed)).await };
+
+        async { (task::<132>(&completed)).await };
+
+        async { (task::<133>(&completed)).await };
+
+        async { (task::<134>(&completed)).await };
+
+        async { (task::<135>(&completed)).await };
+
+        async { (task::<136>(&completed)).await };
+
+        async { (task::<137>(&completed)).await };
+
+        async { (task::<138>(&completed)).await };
+
+        async { (task::<139>(&completed)).await };
+
+        async { (task::<140>(&completed)).await };
+
+        async { (task::<141>(&completed)).await };
+
+        async { (task::<142>(&completed)).await };
+
+        async { (task::<143>(&completed)).await };
+
+        async { (task::<144>(&completed)).await };
+
+        async { (task::<145>(&completed)).await };
+
+        async { (task::<146>(&completed)).await };
+
+        async { (task::<147>(&completed)).await };
+
+        async { (task::<148>(&completed)).await };
+
+        async { (task::<149>(&completed)).await };
+
+        async { (task::<150>(&completed)).await };
+
+        async { (task::<151>(&completed)).await };
+
+        async { (task::<152>(&completed)).await };
+
+        async { (task::<153>(&completed)).await };
+
+        async { (task::<154>(&completed)).await };
+
+        async { (task::<155>(&completed)).await };
+
+        async { (task::<156>(&completed)).await };
+
+        async { (task::<157>(&completed)).await };
+
+        async { (task::<158>(&completed)).await };
+
+        async { (task::<159>(&completed)).await };
+
+        async { (task::<160>(&completed)).await };
+
+        async { (task::<161>(&completed)).await };
+
+        async { (task::<162>(&completed)).await };
+
+        async { (task::<163>(&completed)).await };
+
+        async { (task::<164>(&completed)).await };
+
+        async { (task::<165>(&completed)).await };
+
+        async { (task::<166>(&completed)).await };
+
+        async { (task::<167>(&completed)).await };
+
+        async { (task::<168>(&completed)).await };
+
+        async { (task::<169>(&completed)).await };
+
+        async { (task::<170>(&completed)).await };
+
+        async { (task::<171>(&completed)).await };
+
+        async { (task::<172>(&completed)).await };
+
+        async { (task::<173>(&completed)).await };
+
+        async { (task::<174>(&completed)).await };
+
+        async { (task::<175>(&completed)).await };
+
+        async { (task::<176>(&completed)).await };
+
+        async { (task::<177>(&completed)).await };
+
+        async { (task::<178>(&completed)).await };
+
+        async { (task::<179>(&completed)).await };
+
+        async { (task::<180>(&completed)).await };
+
+        async { (task::<181>(&completed)).await };
+
+        async { (task::<182>(&completed)).await };
+
+        async { (task::<183>(&completed)).await };
+
+        async { (task::<184>(&completed)).await };
+
+        async { (task::<185>(&completed)).await };
+
+        async { (task::<186>(&completed)).await };
+
+        async { (task::<187>(&completed)).await };
+
+        async { (task::<188>(&completed)).await };
+
+        async { (task::<189>(&completed)).await };
+
+        async { (task::<190>(&completed)).await };
+
+        async { (task::<191>(&completed)).await };
+
+        async { (task::<192>(&completed)).await };
+
+        async { (task::<193>(&completed)).await };
+
+        async { (task::<194>(&completed)).await };
+
+        async { (task::<195>(&completed)).await };
+
+        async { (task::<196>(&completed)).await };
+
+        async { (task::<197>(&completed)).await };
+
+        async { (task::<198>(&completed)).await };
+
+        async { (task::<199>(&completed)).await };
+
+        async { (task::<200>(&completed)).await };
+
+        async { (task::<201>(&completed)).await };
+
+        async { (task::<202>(&completed)).await };
+
+        async { (task::<203>(&completed)).await };
+
+        async { (task::<204>(&completed)).await };
+
+        async { (task::<205>(&completed)).await };
+
+        async { (task::<206>(&completed)).await };
+
+        async { (task::<207>(&completed)).await };
+
+        async { (task::<208>(&completed)).await };
+
+        async { (task::<209>(&completed)).await };
+
+        async { (task::<210>(&completed)).await };
+
+        async { (task::<211>(&completed)).await };
+
+        async { (task::<212>(&completed)).await };
+
+        async { (task::<213>(&completed)).await };
+
+        async { (task::<214>(&completed)).await };
+
+        async { (task::<215>(&completed)).await };
+
+        async { (task::<216>(&completed)).await };
+
+        async { (task::<217>(&completed)).await };
+
+        async { (task::<218>(&completed)).await };
+
+        async { (task::<219>(&completed)).await };
+
+        async { (task::<220>(&completed)).await };
+
+        async { (task::<221>(&completed)).await };
+
+        async { (task::<222>(&completed)).await };
+
+        async { (task::<223>(&completed)).await };
+
+        async { (task::<224>(&completed)).await };
+
+        async { (task::<225>(&completed)).await };
+
+        async { (task::<226>(&completed)).await };
+
+        async { (task::<227>(&completed)).await };
+
+        async { (task::<228>(&completed)).await };
+
+        async { (task::<229>(&completed)).await };
+
+        async { (task::<230>(&completed)).await };
+
+        async { (task::<231>(&completed)).await };
+
+        async { (task::<232>(&completed)).await };
+
+        async { (task::<233>(&completed)).await };
+
+        async { (task::<234>(&completed)).await };
+
+        async { (task::<235>(&completed)).await };
+
+        async { (task::<236>(&completed)).await };
+
+        async { (task::<237>(&completed)).await };
+
+        async { (task::<238>(&completed)).await };
+
+        async { (task::<239>(&completed)).await };
+
+        async { (task::<240>(&completed)).await };
+
+        async { (task::<241>(&completed)).await };
+
+        async { (task::<242>(&completed)).await };
+
+        async { (task::<243>(&completed)).await };
+
+        async { (task::<244>(&completed)).await };
+
+        async { (task::<245>(&completed)).await };
+
+        async { (task::<246>(&completed)).await };
+
+        async { (task::<247>(&completed)).await };
+
+        async { (task::<248>(&completed)).await };
+
+        async { (task::<249>(&completed)).await };
+
+        async { (task::<250>(&completed)).await };
+
+        async { (task::<251>(&completed)).await };
+
+        async { (task::<252>(&completed)).await };
+
+        async { (task::<253>(&completed)).await };
+
+        async { (task::<254>(&completed)).await };
+
+        async { (task::<255>(&completed)).await };
         Ok(())
     }
     .await?;

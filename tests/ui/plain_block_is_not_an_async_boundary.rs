@@ -6,8 +6,8 @@ const SERVER: u8 = 1;
 #[hibana_runtime::scope]
 async fn example() -> Result<(), ()> {
     {
-        #[concurrent]
-        core::future::ready(Ok::<(), ()>(()));
+
+async { (core::future::ready(Ok::<(), ()>(()))).await };
     }
     Ok(())
 }

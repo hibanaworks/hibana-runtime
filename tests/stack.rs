@@ -43,38 +43,37 @@ fn buffered(completed: &Cell<usize>) -> Buffered<'_> {
 
 #[hibana_runtime::main(Ready)]
 async fn image(completed: &Cell<usize>) -> Result<(), Infallible> {
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
-    #[concurrent]
-    buffered(completed);
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
+
+    async { (buffered(completed)).await };
     Ok(())
 }
 

@@ -146,15 +146,14 @@ fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program(completed: &Cell<u32>, cancelled: &Cell<usize>) -> Result<(), ()> {
         async {
-            #[concurrent]
-            effect(completed);
-            #[concurrent]
-            effect(completed);
+            async { (effect(completed)).await };
+
+            async { (effect(completed)).await };
             Ok(())
         }
         .await?;
-        #[concurrent]
-        PendingDrop(cancelled);
+
+        async { (PendingDrop(cancelled)).await };
         Err(())
     }
     let completed = Cell::new(0);
@@ -171,23 +170,27 @@ fn automatic_scopes_entry_and_error_cancellation_allocate_nothing() {
 fn grouped_results_and_their_cancellation_allocate_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program(cancelled: &Cell<usize>) -> Result<(), ()> {
-        #[concurrent]
-        let (first, second) = (
+        let (first, second) = (async {
             async {
                 YieldOnce(false).await;
                 Ok(7_u32)
-            },
+            };
             async {
                 YieldOnce(false).await;
                 Ok(true)
-            },
-        );
+            };
+        })
+        .await?;
         assert_eq!((first, second), (7, true));
-        #[concurrent]
-        let (_pending, _failed) = (PendingDrop(cancelled), async {
-            YieldOnce(false).await;
-            Err::<(), _>(())
-        });
+
+        let (_pending, _failed) = (async {
+            async { (PendingDrop(cancelled)).await };
+            async {
+                YieldOnce(false).await;
+                Err::<(), _>(())
+            };
+        })
+        .await?;
         panic!("cancelled result group must not continue")
     }
     let cancelled = Cell::new(0);
@@ -253,22 +256,22 @@ fn localside_declarations_store_their_future_buffer_once() {
     }
     #[hibana_runtime::scope]
     async fn unbound() -> Result<(), Infallible> {
-        #[concurrent]
-        Buffered([7; 4096]);
+        async { (Buffered([7; 4096])).await };
         Ok(())
     }
     #[hibana_runtime::scope]
     async fn bound() -> Result<u8, Infallible> {
-        #[concurrent]
-        let value = Buffered([7; 4096]);
+        let value = async {
+            async { Buffered([7; 4096]).await };
+        }
+        .await?;
         Ok(value)
     }
     #[hibana_runtime::scope]
     async fn child_and_result() -> Result<u8, Infallible> {
-        #[concurrent]
-        Buffered([8; 4096]);
-        #[concurrent]
-        let value = Buffered([7; 4096]);
+        async { (Buffered([8; 4096])).await };
+
+        let value = (Buffered([7; 4096])).await?;
         Ok(value)
     }
     let budget = size_of::<Buffered>() + 16 * size_of::<usize>();
@@ -314,14 +317,23 @@ fn variable_and_array_inputs_keep_one_inline_buffer_per_future() {
     #[hibana_runtime::scope]
     async fn tuple() -> Result<(u8, u8), Infallible> {
         let pending = inputs();
-        #[concurrent]
-        let (first, second) = pending;
+
+        let (first, second) = (async {
+            let (input0, input1) = pending;
+            async { input0.await };
+            async { input1.await };
+        })
+        .await?;
         Ok((first, second))
     }
     #[hibana_runtime::scope]
     async fn array() -> Result<[u8; 3], Infallible> {
-        #[concurrent]
-        let values = [7, 8, 9].map(|value| Buffered([value; 4096]));
+        let values = async {
+            for input in [7, 8, 9].map(|value| Buffered([value; 4096])) {
+                async move { input.await };
+            }
+        }
+        .await?;
         Ok(values)
     }
     let tuple = tuple();
@@ -364,17 +376,17 @@ fn variable_and_array_inputs_keep_one_inline_buffer_per_future() {
 fn an_explicit_result_group_allocates_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program() -> Result<(u8, u16), ()> {
-        #[concurrent]
-        let (first, second) = (
+        let (first, second) = (async {
             async {
                 hibana_runtime::yield_now().await;
                 Ok::<_, ()>(7u8)
-            },
+            };
             async {
                 hibana_runtime::yield_now().await;
                 Ok::<_, ()>(8u16)
-            },
-        );
+            };
+        })
+        .await?;
         Ok((first, second))
     }
     assert_eq!(allocations_during(|| assert_eq!(program(), Ok((7, 8)))), 0);
@@ -397,8 +409,8 @@ fn host_entry_waking_and_cancellation_allocate_nothing() {
             Ok(())
         }
         .await?;
-        #[concurrent]
-        PendingDrop(cancelled);
+
+        async { (PendingDrop(cancelled)).await };
         hibana_runtime::yield_now().await;
         Err(())
     }
@@ -485,10 +497,11 @@ fn external_notification_construction_cloning_and_waiting_allocate_nothing() {
 fn array_declarations_use_caller_storage_without_allocation() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn image(outputs: [&Cell<u8>; 7]) -> Result<(), Infallible> {
-        #[concurrent]
         for output in outputs {
-            YieldOnce(false).await;
-            output.set(1);
+            async move {
+                YieldOnce(false).await;
+                output.set(1);
+            };
         }
         Ok(())
     }
