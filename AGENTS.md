@@ -30,6 +30,27 @@ A one-call async child is valid when it directly expresses independent work.
 Do not invent syntax or duplicate execution APIs just to remove these Rust forms.
 Each result declaration waits only for its explicitly listed futures. Never
 merge result bindings or unrelated children because their declarations are adjacent.
+
+Use one function attribute, `#[hibana_runtime::localside]`, with Rust async/await
+as the basic interface. Inside that function, write independent branches directly:
+
+```rust
+async {
+    let [mut a, mut b] = endpoint.par()?;
+
+    async { a.send::<First>(&first).await?; };
+    async { b.send::<Second>(&second).await?; };
+
+    Ok(())
+}.await?;
+```
+
+The runtime drives these children concurrently and finishes them before the outer
+await completes. A single-call async child is valid. Keep Endpoint operations
+visible; the runtime owns pinning, task handles, join construction and child
+completion. Keep the existing declaration grammar; do not add custom concurrency
+syntax to replace these Rust forms.
+
 Declare repeated participants from their actual fixed arrays. Do not make
 consumers construct task collections, spawn handles, polling loops or result
 collection loops. Ordinary unmarked Rust loops keep their sequential meaning.
