@@ -1,14 +1,23 @@
 name: Runtime checks
-on: workflow_dispatch
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   runtime:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: hibanaworks/hibana
-          ref: e139912e07fe4cd5ba599dd3749d6e03ce9d1ee1
+          ref: c1d92129b0ae95572aaa53bb2e7455c20689bb43
           path: validation-core
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -20,15 +29,19 @@ jobs:
           components: miri, rust-src
       - name: Install proof tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y z3 elan
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            brew install z3 elan
+          else
+            sudo apt-get update
+            sudo apt-get install -y z3 elan
+          fi
           elan toolchain install leanprover/lean4:v4.34.1
       - name: Validate
         env:
           HIBANA_RESOURCE_GUARD: ${{ github.workspace }}/validation-core/.github/scripts/lib/resource_guard.sh
         run: bash tools/check.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: validation
+          name: validation-${{ matrix.os }}
           path: validation/

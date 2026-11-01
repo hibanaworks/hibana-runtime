@@ -82,5 +82,6 @@ the execution path. Scheduler arithmetic proofs do not prove macro refinement.
 Run `tools/check.sh` with the shared descendant-memory guard. One heavy workload
 at a time; retain source hashes and failed verification. Do not use Docker or a
 VM, raise the memory limit, or weaken a test to obtain a passing result.
-Publish verified source with `[skip ci]`; run the gates locally while Actions
-budget is unavailable. Do not use development subagents.
+Run the gates locally and in GitHub Actions on the published revision. Actions
+is available again; do not skip required checks because of the former budget
+limit. Distinguish queued, running and successful checks. Do not use development subagents.
