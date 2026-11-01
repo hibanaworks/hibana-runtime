@@ -39,7 +39,9 @@ jobs:
       - name: Validate
         env:
           HIBANA_RESOURCE_GUARD: ${{ github.workspace }}/validation-core/.github/scripts/lib/resource_guard.sh
-        run: bash tools/check.sh
+        run: |
+          chmod u+x "$HIBANA_RESOURCE_GUARD"
+          bash tools/check.sh
       - uses: actions/upload-artifact@v7
         if: always()
         with:
