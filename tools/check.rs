@@ -194,6 +194,8 @@ fn main() -> Result<()> {
             "--test",
             "array_configuration",
             "--test",
+            "entry",
+            "--test",
             "no_alloc",
             "--test",
             "placement",

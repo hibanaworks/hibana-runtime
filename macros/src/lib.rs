@@ -47,8 +47,31 @@ fn expand(mut function: ItemFn, entry: Option<Entry>) -> TokenStream {
         ReturnType::Type(_, ty) => (**ty).clone(),
         ReturnType::Default => parse_quote!(()),
     };
+    let unit_entry =
+        entry.is_some() && matches!(&output, Type::Tuple(tuple) if tuple.elems.is_empty());
+    let error = if unit_entry {
+        UnitReturns.visit_block_mut(&mut function.block);
+        let returns = matches!(
+            function.block.stmts.last(),
+            Some(Stmt::Expr(Expr::Return(_), _))
+        );
+        if !returns && let Some(Stmt::Expr(tail, None)) = function.block.stmts.last_mut() {
+            let value = tail.clone();
+            *function.block.stmts.last_mut().expect("unit tail") =
+                parse_quote!(let (): () = #value;);
+        }
+        if !returns {
+            function.block.stmts.push(Stmt::Expr(
+                parse_quote!(::core::result::Result::Ok::<(), ::core::convert::Infallible>(())),
+                None,
+            ));
+        }
+        quote!(::core::convert::Infallible)
+    } else {
+        quote!(<#output as ::hibana_runtime::__private::Outcome>::Error)
+    };
     let mut lower = Lower {
-        error: quote!(<#output as ::hibana_runtime::__private::Outcome>::Error),
+        error,
         diagnostics: Tokens::new(),
         next: 0,
     };
@@ -69,6 +92,15 @@ fn expand(mut function: ItemFn, entry: Option<Entry>) -> TokenStream {
                 ::hibana_runtime::__private::host_block_on(::core::pin::pin!(async move #body))
             }),
         });
+        if unit_entry {
+            let body = function.block;
+            function.block = Box::new(parse_quote!({
+                match #body {
+                    ::core::result::Result::Ok(()) => (),
+                    ::core::result::Result::Err(error) => match error {},
+                }
+            }));
+        }
     } else {
         // Ordinary Rust 2024 function signatures support lifetime elision in
         // paths such as Endpoint<CLIENT>. Return-position impl Future captures
@@ -116,6 +148,26 @@ fn expand(mut function: ItemFn, entry: Option<Entry>) -> TokenStream {
         }));
     }
     quote!(#function).into()
+}
+
+// A unit entry point keeps Rust's unit return contract. Only its outer body is
+// adapted to the scheduler's infallible outcome; nested futures retain theirs.
+struct UnitReturns;
+
+impl VisitMut for UnitReturns {
+    fn visit_expr_return_mut(&mut self, returned: &mut syn::ExprReturn) {
+        let mut value = returned.expr.take();
+        if let Some(value) = value.as_mut() {
+            self.visit_expr_mut(value);
+        }
+        returned.expr = Some(Box::new(parse_quote!({
+            let (): () = (#value);
+            ::core::result::Result::Ok::<(), ::core::convert::Infallible>(())
+        })));
+    }
+    fn visit_expr_async_mut(&mut self, _: &mut syn::ExprAsync) {}
+    fn visit_expr_closure_mut(&mut self, _: &mut syn::ExprClosure) {}
+    fn visit_item_mut(&mut self, _: &mut syn::Item) {}
 }
 
 struct Lower {

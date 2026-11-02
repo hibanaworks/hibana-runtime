@@ -23,6 +23,11 @@ Enable `host` for an argument-free entry point. Other platforms provide their
 own `Driver` through `#[hibana_runtime::main(driver)]`. Both use the same scoped
 scheduler. `yield_now().await` lets another localside run during a long computation.
 
+An entry point may return `()` when it cannot fail. This also works with Rust's
+`#[test]`: put `#[hibana_runtime::main(driver)]` before `#[test]`. Returning from
+the entry point waits for its declared children, including on an early return.
+Fallible entry points keep their ordinary `Result` return type.
+
 Use a declaration loop for a fixed array of participants. Each iteration becomes
 its own localside; the runtime stores and drives them together. Ordinary `for`
 loops remain sequential. Array size comes from the inputs, with no task capacity,
