@@ -212,8 +212,54 @@ impl Io {
         .await
     }
 
+    /// Write a prefix and return its length, or zero for an empty buffer.
+    ///
+    /// A pending call has accepted no bytes. Cancellation removes its readiness
+    /// registration. Keep the returned byte count with the output owner when
+    /// writing a framed stream across cancellation boundaries. Requires the
+    /// host entry point when the descriptor cannot accept bytes immediately.
+    pub async fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        let mut interest = None;
+        poll_fn(|cx| match self.try_write(buffer) {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                self.wait(cx, &mut interest, EVFILT_WRITE)
+            }
+            result => Poll::Ready(result),
+        })
+        .await
+    }
+
+    fn try_write(&self, buffer: &[u8]) -> io::Result<usize> {
+        loop {
+            // SAFETY: the descriptor and readable slice remain live for this
+            // call. Neither syscall retains the buffer pointer.
+            let count = unsafe {
+                match self.kind {
+                    Kind::Socket => send(
+                        self.fd.as_raw_fd(),
+                        buffer.as_ptr().cast(),
+                        buffer.len(),
+                        MSG_NOSIGNAL,
+                    ),
+                    Kind::File => write(self.fd.as_raw_fd(), buffer.as_ptr().cast(), buffer.len()),
+                }
+            };
+            if count >= 0 {
+                return Ok(count as usize);
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+        }
+    }
+
     /// Write every byte from the caller's buffer. Cancellation preserves bytes
-    /// already written and removes the pending readiness registration.
+    /// already written and removes the pending readiness registration. Use
+    /// [`Self::write`] to retain the accepted byte count outside this future.
     pub async fn write_all(&mut self, buffer: &[u8]) -> io::Result<()> {
         let mut written = 0;
         let mut interest = None;
@@ -222,38 +268,13 @@ impl Io {
                 if written == buffer.len() {
                     return Poll::Ready(Ok(()));
                 }
-                let remaining = &buffer[written..];
-                // SAFETY: the descriptor and the complete readable byte slice stay
-                // live for this call. The OS does not retain the buffer pointer.
-                let count = unsafe {
-                    match self.kind {
-                        Kind::Socket => send(
-                            self.fd.as_raw_fd(),
-                            remaining.as_ptr().cast(),
-                            remaining.len(),
-                            MSG_NOSIGNAL,
-                        ),
-                        Kind::File => write(
-                            self.fd.as_raw_fd(),
-                            remaining.as_ptr().cast(),
-                            remaining.len(),
-                        ),
-                    }
-                };
-                if count > 0 {
-                    written += count as usize;
-                    continue;
-                }
-                if count == 0 {
-                    return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
-                }
-                let error = io::Error::last_os_error();
-                match error.kind() {
-                    io::ErrorKind::Interrupted => continue,
-                    io::ErrorKind::WouldBlock => {
+                match self.try_write(&buffer[written..]) {
+                    Ok(0) => return Poll::Ready(Err(io::ErrorKind::WriteZero.into())),
+                    Ok(count) => written += count,
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                         return self.wait(cx, &mut interest, EVFILT_WRITE);
                     }
-                    _ => return Poll::Ready(Err(error)),
+                    Err(error) => return Poll::Ready(Err(error)),
                 }
             }
         })

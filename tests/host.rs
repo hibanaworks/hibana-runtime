@@ -146,6 +146,56 @@ fn backpressure_keeps_large_writes_pending_while_the_reader_progresses() {
 }
 
 #[test]
+fn cancelled_pending_writes_keep_the_callers_accepted_prefix() {
+    #[hibana_runtime::main]
+    async fn run(mut reader: Io, mut writer: Io, input: &[u8]) -> io::Result<()> {
+        assert_eq!(writer.write(&[]).await?, 0);
+        let mut accepted = 0;
+        while accepted < input.len() {
+            match hibana_runtime::race(
+                async { writer.write(&input[accepted..]).await.map(Some) },
+                async { Ok(None) },
+            )
+            .await?
+            {
+                Some(count) => {
+                    assert_ne!(count, 0);
+                    accepted += count;
+                }
+                None => break,
+            }
+        }
+        assert!(accepted > 0 && accepted < input.len());
+        async {
+            let mut received = 0;
+            let mut bytes = [0; 4096];
+            loop {
+                let count = reader.read(&mut bytes).await?;
+                if count == 0 {
+                    break;
+                }
+                assert_eq!(&bytes[..count], &input[received..received + count]);
+                received += count;
+            }
+            assert_eq!(received, input.len());
+        };
+        async move {
+            writer.write_all(&input[accepted..]).await?;
+            drop(writer);
+        };
+        Ok(())
+    }
+    let (reader, writer) = UnixStream::pair().unwrap();
+    let input: Vec<_> = (0..1024 * 1024).map(|n| n as u8).collect();
+    run(
+        Io::new(reader.into()).unwrap(),
+        Io::new(writer.into()).unwrap(),
+        &input,
+    )
+    .unwrap();
+}
+
+#[test]
 fn a_timeout_cancels_the_read_and_the_same_handle_can_read_again() {
     #[hibana_runtime::main]
     async fn run(mut reader: Io, mut writer: Io) -> io::Result<()> {
@@ -198,6 +248,7 @@ fn closed_peer_returns_broken_pipe_and_duplicate_handles_keep_their_own_lifetime
     async fn run(writer: Io) -> io::Result<()> {
         let mut duplicate = writer.try_clone()?;
         drop(writer);
+        assert_eq!(duplicate.write(&[]).await?, 0);
         assert_eq!(
             duplicate.write_all(&[1]).await.unwrap_err().kind(),
             io::ErrorKind::BrokenPipe
