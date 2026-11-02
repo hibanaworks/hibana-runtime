@@ -85,6 +85,12 @@ point; another driver returns an error. Rust heap allocation is unnecessary for
 these operations, although each retained Waker and wait registration owns an OS
 descriptor. Application buffers and decoding remain with their I/O owner.
 
+`host::Datagram` owns a nonblocking Unix datagram socket. Its `send_to` and
+`recv_from` preserve message boundaries and the OS sender address. Each pending
+operation owns its readiness registration; cancellation removes that registration.
+Descriptor duplication preserves the bound address without sharing Rust mutable
+storage. Datagram buffers stay with the I/O participant.
+
 External callbacks can enqueue their data and call `Notification::notify`.
 `host::notification()` returns the owned notification handle and an `Io` reader.
 Wakes can coalesce: the I/O participant drains its data before waiting on that

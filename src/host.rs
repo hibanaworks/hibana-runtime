@@ -20,6 +20,8 @@ use std::{
 
 mod descriptor;
 pub use descriptor::{Io, Notification, notification};
+mod datagram;
+pub use datagram::Datagram;
 mod process;
 pub use process::Process;
 

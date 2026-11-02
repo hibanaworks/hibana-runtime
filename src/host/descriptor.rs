@@ -266,29 +266,38 @@ impl Io {
         interest: &mut Option<Interest>,
         filter: i16,
     ) -> Poll<io::Result<T>> {
-        // Rebind on each pending poll: the future may have moved to a different
-        // driver, and a one-shot event may already have been consumed.
-        *interest = None;
-        let result = Events::current(cx).and_then(|queue| {
-            Interest::new(
-                queue,
-                Event {
-                    ident: self.fd.as_raw_fd() as usize,
-                    filter,
-                    flags: EV_ADD | EV_ONESHOT,
-                    fflags: 0,
-                    data: 0,
-                    udata: ptr::null_mut(),
-                },
-            )
-        });
-        match result {
-            Ok(registration) => {
-                *interest = Some(registration);
-                Poll::Pending
-            }
-            Err(error) => Poll::Ready(Err(error)),
+        wait(self.fd.as_fd(), cx, interest, filter)
+    }
+}
+
+pub(super) fn wait<T>(
+    fd: BorrowedFd<'_>,
+    cx: &Context<'_>,
+    interest: &mut Option<Interest>,
+    filter: i16,
+) -> Poll<io::Result<T>> {
+    // Rebind on each pending poll: the future may have moved to a different
+    // driver, and a one-shot event may already have been consumed.
+    *interest = None;
+    let result = Events::current(cx).and_then(|queue| {
+        Interest::new(
+            queue,
+            Event {
+                ident: fd.as_raw_fd() as usize,
+                filter,
+                flags: EV_ADD | EV_ONESHOT,
+                fflags: 0,
+                data: 0,
+                udata: ptr::null_mut(),
+            },
+        )
+    });
+    match result {
+        Ok(registration) => {
+            *interest = Some(registration);
+            Poll::Pending
         }
+        Err(error) => Poll::Ready(Err(error)),
     }
 }
 
