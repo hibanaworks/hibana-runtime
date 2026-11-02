@@ -16,6 +16,38 @@ fn run<T>(future: impl Future<Output = T>) -> T {
 }
 
 #[test]
+fn collected_inputs_rotate_without_an_extra_completion_participant() {
+    #[scope]
+    async fn program(polls: &[Cell<u8>; 8], next: &Cell<usize>) -> Result<(u8, u8), ()> {
+        async {
+            for step in 0..4 {
+                polls[next.get()].set(0);
+                next.set(next.get() + 1);
+                if step != 3 {
+                    hibana_runtime::yield_now().await;
+                }
+            }
+            Ok(0)
+        };
+        async {
+            for step in 0..4 {
+                polls[next.get()].set(1);
+                next.set(next.get() + 1);
+                if step != 3 {
+                    hibana_runtime::yield_now().await;
+                }
+            }
+            Ok(1)
+        };
+    }
+    let polls = core::array::from_fn(|_| Cell::new(u8::MAX));
+    let next = Cell::new(0);
+    assert_eq!(run(program(&polls, &next)), Ok((0, 1)));
+    assert_eq!(next.get(), polls.len());
+    assert_eq!(polls.map(Cell::into_inner), [0, 1, 1, 0, 0, 1, 1, 0]);
+}
+
+#[test]
 fn unmarked_children_return_data_in_declaration_order_after_both_make_progress() {
     #[scope]
     async fn program(started: &Cell<u8>) -> Result<(u32, bool), ()> {

@@ -761,11 +761,19 @@ impl Lower {
             placements.extend(quote!(let #pinned = ::core::pin::pin!({ #binding #rows });));
             children = vec![quote!(::hibana_runtime::__private::placed_rows::<#error, _>(#pinned))];
         }
-        let tail: Expr = if suffix.is_empty() {
+        let tail: Expr = if suffix.is_empty() || (collects && suffix.len() == 1) {
             let rows = storage(&children);
+            // Collected bodies append one generated Ok(None) after the last
+            // declarations. It has no parent effect or future to drive. Keep
+            // its result after completion without adding a scheduler slot.
+            let completed = if collects {
+                quote!(.map(|()| ::core::option::Option::None))
+            } else {
+                Tokens::new()
+            };
             parse_quote!({
                 #placements
-                ::hibana_runtime::__private::Runtime::<#error, _>::new(#rows).await
+                ::hibana_runtime::__private::Runtime::<#error, _>::new(#rows).await #completed
             })
         } else {
             let output = self.name("output");

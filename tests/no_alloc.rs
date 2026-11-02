@@ -373,6 +373,36 @@ fn variable_and_array_inputs_keep_one_inline_buffer_per_future() {
 }
 
 #[test]
+fn large_success_values_have_one_slot_per_input() {
+    const BYTES: usize = 4096;
+    #[hibana_runtime::scope]
+    async fn program() -> Result<([u8; BYTES], [u8; BYTES]), Infallible> {
+        async {
+            hibana_runtime::yield_now().await;
+            Ok([7; BYTES])
+        };
+        async { Ok([8; BYTES]) };
+    }
+    let future = program();
+    let bytes = size_of_val(&future);
+    let budget = 2 * BYTES + 32 * size_of::<usize>();
+    println!("two 4096-byte success values: future={bytes}, budget={budget}");
+    assert!(
+        bytes <= budget,
+        "successful values were duplicated in the future"
+    );
+    assert_eq!(
+        allocations_during(|| {
+            let values =
+                hibana_runtime::__private::block_on(future, TestDriver(Waker::noop(), || {}))
+                    .unwrap();
+            assert_eq!(values, ([7; BYTES], [8; BYTES]));
+        }),
+        0
+    );
+}
+
+#[test]
 fn an_explicit_result_group_allocates_nothing() {
     #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
     async fn program() -> Result<(u8, u16), ()> {
