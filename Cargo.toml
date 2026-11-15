@@ -20,7 +20,7 @@ default = []
 host = []
 
 [dev-dependencies]
-hibana = "=0.9.9"
+hibana = { path = "../hibana" }
 
 [target.'cfg(unix)'.dev-dependencies]
 libc = "0.2"

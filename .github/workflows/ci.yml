@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+defaults:
+  run:
+    working-directory: hibana-runtime
 jobs:
   runtime:
     strategy:
@@ -14,11 +17,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: hibana-runtime
       - uses: actions/checkout@v7
         with:
           repository: hibanaworks/hibana
-          ref: c1d92129b0ae95572aaa53bb2e7455c20689bb43
-          path: validation-core
+          ref: main
+          path: hibana
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -38,12 +43,10 @@ jobs:
           elan toolchain install leanprover/lean4:v4.34.1
       - name: Validate
         env:
-          HIBANA_RESOURCE_GUARD: ${{ github.workspace }}/validation-core/.github/scripts/lib/resource_guard.sh
-        run: |
-          chmod u+x "$HIBANA_RESOURCE_GUARD"
-          bash tools/check.sh
+          HIBANA_RESOURCE_GUARD: ${{ github.workspace }}/hibana/.github/scripts/lib/resource_guard.sh
+        run: bash tools/check.sh
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: validation-${{ matrix.os }}
-          path: validation/
+          path: hibana-runtime/validation/

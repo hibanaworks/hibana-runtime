@@ -55,13 +55,14 @@ impl Address {
 struct Frame {
     destination: Address,
     source: u8,
-    label: u8,
+    label: u16,
     payload: [u8; size_of::<u32>()],
 }
 
 impl Frame {
     fn received(&self) -> ReceivedFrame<'_> {
         let session = self.destination.session.raw().to_be_bytes();
+        let label = self.label.to_be_bytes();
         let header = FrameHeader::from_bytes([
             session[0],
             session[1],
@@ -70,7 +71,8 @@ impl Frame {
             self.destination.lane,
             self.source,
             self.destination.role,
-            self.label,
+            label[0],
+            label[1],
         ]);
         ReceivedFrame::framed(header, Payload::new(&self.payload))
     }
@@ -107,15 +109,12 @@ impl<const FRAMES: usize, const RECEIVERS: usize> Transport for Loopback<FRAMES,
         )
     }
 
-    fn poll_send<'a, 'f>(
+    fn poll_send<'f>(
         &self,
-        tx: &'a mut Self::Tx<'a>,
+        tx: &mut Self::Tx<'_>,
         outgoing: Outgoing<'f>,
         _cx: &mut Context<'_>,
-    ) -> Poll<Result<(), TransportError>>
-    where
-        'a: 'f,
-    {
+    ) -> Poll<Result<(), TransportError>> {
         if outgoing.lane() != tx.0.lane {
             return Poll::Ready(Err(TransportError::Failed));
         }
@@ -156,13 +155,13 @@ impl<const FRAMES: usize, const RECEIVERS: usize> Transport for Loopback<FRAMES,
         Poll::Ready(Ok(()))
     }
 
-    fn cancel_send<'a>(&self, _tx: &'a mut Self::Tx<'a>) {
+    fn cancel_send(&self, _tx: &mut Self::Tx<'_>) {
         // A send commits immediately or fails without publishing a frame.
     }
 
     fn poll_recv<'a>(
         &'a self,
-        rx: &'a mut Self::Rx<'a>,
+        rx: &'a mut Self::Rx<'_>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<ReceivedFrame<'a>, TransportError>> {
         rx.current = None;

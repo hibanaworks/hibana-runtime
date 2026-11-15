@@ -407,10 +407,10 @@ impl VisitMut for ImmediateBody<'_> {
                 self.visit_expr_mut(&mut tried.expr);
                 let value = &tried.expr;
                 let error = self.error;
-                *expression = parse_quote!(match (#value) {
+                *expression = parse_quote!(match (#value).map_err(<#error>::from) {
                     ::core::result::Result::Ok(value) => value,
-                    ::core::result::Result::Err(error) => break #label
-                        (::core::result::Result::Err(<#error>::from(error))),
+                    failure @ ::core::result::Result::Err(_) => break #label
+                        failure.map(|_| unreachable!("matched an error result")),
                 });
             }
             _ => visit_mut::visit_expr_mut(self, expression),

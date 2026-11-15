@@ -20,7 +20,7 @@ use std::{
     task::Wake,
 };
 
-const HEADER: usize = 8;
+const HEADER: usize = size_of::<FrameHeader>();
 const PAYLOAD: usize = size_of::<u32>();
 const FRAMES: usize = 4;
 
@@ -208,20 +208,18 @@ impl Transport for ImageIo {
             },
         )
     }
-    fn poll_send<'a, 'f>(
+    fn poll_send<'f>(
         &self,
-        tx: &'a mut Self::Tx<'a>,
+        tx: &mut Self::Tx<'_>,
         outgoing: Outgoing<'f>,
         _: &mut Context<'_>,
-    ) -> Poll<Result<(), TransportError>>
-    where
-        'a: 'f,
-    {
+    ) -> Poll<Result<(), TransportError>> {
         if outgoing.lane() != tx.address.lane || outgoing.payload().as_bytes().len() > PAYLOAD {
             tx.waiting(false);
             return Poll::Ready(Err(TransportError::Capacity));
         }
         let session = tx.address.session.raw().to_be_bytes();
+        let label = outgoing.frame_label().raw().to_be_bytes();
         let mut bytes = [0; HEADER + PAYLOAD];
         bytes[..HEADER].copy_from_slice(&[
             session[0],
@@ -231,7 +229,8 @@ impl Transport for ImageIo {
             tx.address.lane,
             tx.address.role,
             outgoing.target_role(),
-            outgoing.frame_label().raw(),
+            label[0],
+            label[1],
         ]);
         let len = HEADER + outgoing.payload().as_bytes().len();
         bytes[HEADER..len].copy_from_slice(outgoing.payload().as_bytes());
@@ -255,12 +254,12 @@ impl Transport for ImageIo {
             }
         }
     }
-    fn cancel_send<'a>(&self, tx: &'a mut Self::Tx<'a>) {
+    fn cancel_send(&self, tx: &mut Self::Tx<'_>) {
         tx.waiting(false);
     }
     fn poll_recv<'a>(
         &'a self,
-        rx: &'a mut Self::Rx<'a>,
+        rx: &'a mut Self::Rx<'_>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<ReceivedFrame<'a>, TransportError>> {
         rx.current = None;

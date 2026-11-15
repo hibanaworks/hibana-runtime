@@ -365,6 +365,37 @@ fn infallible_errors_are_inferred_for_tail_values_and_early_returns() {
 }
 
 #[test]
+fn infallible_immediate_scopes_keep_question_mark_and_unit_entry_boundaries() {
+    #[scope]
+    async fn value() -> Result<u32, core::convert::Infallible> {
+        let finished = Cell::new(false);
+        async {
+            async {
+                yield_once().await;
+                finished.set(true);
+            };
+            Ok(())
+        }
+        .await?;
+        assert!(finished.get());
+        Ok(42)
+    }
+    #[hibana_runtime::main(TestDriver(Waker::noop(), || {}))]
+    async fn entry() {
+        async {
+            async {
+                yield_once().await;
+            };
+            Ok(())
+        }
+        .await
+        .unwrap();
+    }
+    assert_eq!(run(value()), Ok(42));
+    entry();
+}
+
+#[test]
 fn future_inputs_are_constructed_before_their_children_are_polled() {
     fn task<'a>(
         constructed: &'a Cell<u32>,

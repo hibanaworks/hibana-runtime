@@ -18,9 +18,16 @@ fn sources() -> Result<String> {
     let mut names: Vec<_> = names
         .lines()
         .filter(|name| Path::new(name).is_file())
+        .map(str::to_owned)
         .collect();
+    let core = capture(
+        "git",
+        &["-C", "../hibana", "ls-files", "--cached", "--others", "--exclude-standard"],
+    )?;
+    names.extend(core.lines().map(|name| format!("../hibana/{name}")).filter(|name| Path::new(name).is_file()));
     names.sort_unstable();
     names.dedup();
+    let names: Vec<_> = names.iter().map(String::as_str).collect();
     capture("shasum", &[&["-a", "256", "--"], &names[..]].concat())
 }
 
@@ -49,12 +56,15 @@ fn main() -> Result<()> {
     let before = sources()?;
     fs::write("validation/source-before.sha256", &before)?;
     let versions = format!(
-        "{}{}{}",
+        "{}{}{}core={}",
         capture("rustc", &["+stable", "--version"])?,
         capture("cargo", &["+stable", "--version"])?,
-        capture("git", &["rev-parse", "HEAD"])?
+        capture("git", &["rev-parse", "HEAD"])?,
+        capture("git", &["-C", "../hibana", "rev-parse", "HEAD"])?
     );
     fs::write("validation/versions.txt", versions)?;
+    fs::write("validation/runtime-dirty.patch", capture("git", &["diff", "HEAD", "--binary"])?)?;
+    fs::write("validation/core-dirty.patch", capture("git", &["-C", "../hibana", "diff", "HEAD", "--binary"])?)?;
     check(
         "format",
         "cargo",

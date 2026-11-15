@@ -255,10 +255,14 @@ sequential Rust function.
 
 ## Run and verify
 
+Repository examples and checks use the canonical Hibana checkout at
+`../hibana`. Validation records both repositories' source hashes, revisions
+and uncommitted patches with the compiler versions.
+
 ```sh
 cargo +stable run --example localsides
 cargo +stable run --example images
-HIBANA_RESOURCE_GUARD=/path/to/shared/resource-guard bash tools/check.sh
+HIBANA_RESOURCE_GUARD=../hibana/.github/scripts/lib/resource_guard.sh bash tools/check.sh
 ```
 
 The second example uses Unix datagrams on Unix hosts. The OS starts two threads
